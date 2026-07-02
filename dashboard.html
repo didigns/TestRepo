@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>LevA 대시보드</title>
+<style>
+  :root {
+    --bg: #0e0f13; --panel: #16171d; --card: #1a1c23; --card2: #1e2029;
+    --field: #101116; --border: rgba(255,255,255,0.07); --border-strong: rgba(255,255,255,0.12);
+    --text: #f3f5f9; --text-2: #a2abbb; --text-3: #6b7383;
+    --accent: #7c6cff; --accent-soft: rgba(124,108,255,0.14); --grad: linear-gradient(135deg,#7c6cff,#a855f7);
+    --ok: #35d29a; --bad: #f77;
+    --font: "Pretendard","Inter",-apple-system,"Segoe UI","맑은 고딕",sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; font-family: var(--font); background: var(--bg); color: var(--text);
+    height: 100vh; overflow: hidden; display: flex; flex-direction: column; font-size: 13px; -webkit-font-smoothing: antialiased; }
+  ::-webkit-scrollbar { width: 10px; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 8px; border: 3px solid transparent; background-clip: content-box; }
+
+  header { flex: none; display: flex; align-items: center; gap: 12px; padding: 15px 24px; border-bottom: 1px solid var(--border); }
+  .logo { width: 32px; height: 32px; border-radius: 9px; flex: none; background: var(--grad); display: flex; align-items: center; justify-content: center; }
+  .logo svg { width: 17px; height: 17px; }
+  .htitle b { font-size: 14.5px; font-weight: 700; } .htitle span { display: block; font-size: 10.5px; color: var(--text-3); }
+  .hspacer { flex: 1; }
+  .pill { font-size: 11px; padding: 5px 10px; border-radius: 20px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+  .pill.on { background: rgba(53,210,154,.14); color: var(--ok); } .pill.off { background: rgba(255,119,119,.14); color: var(--bad); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .btn { background: #242730; color: var(--text); border: 1px solid var(--border-strong); border-radius: 9px; padding: 7px 13px; cursor: pointer; font-size: 12px; font-family: var(--font); }
+  .btn:hover { background: #2c303a; }
+
+  .tabs { flex: none; display: flex; gap: 4px; padding: 10px 24px 0; border-bottom: 1px solid var(--border); }
+  .tab { padding: 9px 16px; border: none; background: transparent; color: var(--text-2); font-size: 13px; font-weight: 500; cursor: pointer; font-family: var(--font); border-bottom: 2px solid transparent; border-radius: 6px 6px 0 0; }
+  .tab:hover { color: var(--text); background: rgba(255,255,255,.03); }
+  .tab.active { color: #fff; border-bottom-color: var(--accent); }
+  .tab .badge { font-size: 10.5px; color: var(--text-3); margin-left: 6px; }
+
+  .pane { flex: 1; overflow: hidden; display: none; }
+  .pane.active { display: flex; flex-direction: column; }
+  .scroll { flex: 1; overflow-y: auto; padding: 20px 24px 26px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 13px; margin-bottom: 16px; }
+  .metric { background: var(--card); border: 1px solid var(--border); border-radius: 13px; padding: 16px; }
+  .metric .label { font-size: 12px; color: var(--text-3); }
+  .metric .num { font-size: 28px; font-weight: 700; margin-top: 8px; letter-spacing: -.5px; }
+  .metric .sub { font-size: 11px; color: var(--text-3); margin-top: 3px; }
+
+  .cols { display: grid; grid-template-columns: 1.3fr 1fr; gap: 15px; }
+  @media (max-width: 820px) { .cols { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 13px; padding: 16px; }
+  .card h3 { margin: 0 0 11px; font-size: 12px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: .5px; display:flex; align-items:center; justify-content:space-between; }
+  .row { display: flex; align-items: center; gap: 10px; background: var(--field); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-size: 12.5px; margin-bottom: 7px; }
+  .row:last-child { margin-bottom: 0; }
+  .row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e2e7ef; }
+  .row .kw { font-size: 10.5px; color: #a99cff; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tag { font-size: 10px; padding: 2px 8px; border-radius: 20px; flex: none; }
+  .tag.ok { background: rgba(53,210,154,.14); color: var(--ok); } .tag.bad { background: rgba(255,119,119,.14); color: var(--bad); } .tag.blue { background: var(--accent-soft); color: #b8adff; }
+  .empty { font-size: 12px; color: var(--text-3); padding: 16px; text-align: center; background: var(--field); border: 1px dashed var(--border-strong); border-radius: 10px; }
+  input[type=text] { width: 100%; padding: 9px 12px; border: 1px solid var(--border-strong); border-radius: 9px; background: var(--field); color: #fff; font-size: 12.5px; font-family: var(--font); outline: none; }
+  input[type=text]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+  /* 키워드 탭 */
+  .kwlayout { display: flex; gap: 14px; flex: 1; min-height: 0; padding: 18px 22px; }
+  .kwpanel { background: var(--card); border: 1px solid var(--border); border-radius: 13px; padding: 14px; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+  .kwlayout .kw { flex: 0 0 290px; transition: flex-basis .28s ease, opacity .2s ease; overflow: hidden; }
+  .kwlayout .files { flex: 1 1 0; transition: flex-grow .28s ease; }
+  .kwlayout .viewer { flex: 0 0 0; overflow: hidden; padding: 0; transition: flex-grow .28s ease; background: #0b0c0f; }
+  .kwlayout.viewing .kw { flex-basis: 0; opacity: 0; padding: 0; border: 0; pointer-events: none; }
+  .kwlayout.viewing .files { flex: 2 1 0; }
+  .kwlayout.viewing .viewer { flex: 8 1 0; }
+  .kwlist { overflow-y: auto; margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
+  .kwitem { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 11px; border-radius: 9px; cursor: pointer; background: var(--field); border: 1px solid transparent; font-size: 12.5px; }
+  .kwitem:hover { border-color: var(--border-strong); }
+  .kwitem.active { background: var(--accent-soft); border-color: var(--accent); color: #fff; }
+  .kwitem .cnt { font-size: 10.5px; color: var(--text-3); background: rgba(255,255,255,.05); padding: 1px 8px; border-radius: 20px; flex: none; }
+  .kwitem.active .cnt { color: #b8adff; }
+  .filepanel { min-height: 0; }
+  .filelist { overflow-y: auto; margin-top: 10px; display: flex; flex-direction: column; gap: 7px; }
+
+  /* 채팅 로그 탭 */
+  .chatlist { display: flex; flex-direction: column; gap: 12px; }
+  .qa { background: var(--card); border: 1px solid var(--border); border-radius: 13px; padding: 14px 16px; }
+  .qa .meta { font-size: 10.5px; color: var(--text-3); margin-bottom: 8px; }
+  .qa .q { font-size: 13px; color: #fff; font-weight: 500; display: flex; gap: 8px; }
+  .qa .a { font-size: 12.5px; color: var(--text-2); margin-top: 8px; white-space: pre-wrap; line-height: 1.55; display: flex; gap: 8px; }
+  .qa .who { flex: none; font-size: 10px; padding: 2px 7px; border-radius: 6px; height: fit-content; }
+  .who.u { background: #2a2d36; color: #cfd6e2; } .who.a { background: var(--accent-soft); color: #b8adff; }
+  .filelink { color: #cfe0ff; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; font-weight: 600; padding: 0 2px; border-radius: 4px; }
+  .filelink:hover { background: rgba(255,255,255,0.15); color: #fff; }
+
+  /* 채팅 로그 + 인라인 뷰어 분할 */
+  .chatwrap { display: flex; height: 100%; min-height: 0; }
+  .chatcol { flex: 1 1 0; min-width: 0; overflow-y: auto; padding: 18px 22px 24px; transition: flex-grow .28s ease; }
+  .chathead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .chathead h3 { margin: 0; font-size: 12px; color: var(--text-3); text-transform: uppercase; letter-spacing: .5px; }
+  .viewercol { flex: 0 0 0; min-width: 0; overflow: hidden; display: flex; flex-direction: column; border-left: 1px solid var(--border); transition: flex-grow .28s ease; background: #0b0c0f; }
+  .chatwrap.split .chatcol { flex-grow: 2; }
+  .chatwrap.split .viewercol { flex-grow: 8; }
+  .vhead { flex: none; display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-bottom: 1px solid var(--border); background: var(--panel); }
+  .vicon { width: 28px; height: 28px; border-radius: 8px; flex: none; background: var(--grad); display: flex; align-items: center; justify-content: center; font-size: 14px; }
+  .vmeta { min-width: 0; flex: 1; } .vmeta b { font-size: 13px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .vmeta span { font-size: 10.5px; color: var(--text-3); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vcontent { flex: 1; overflow: auto; position: relative; }
+  .vcontent iframe { width: 100%; height: 100%; border: none; background: #fff; }
+  .vcontent img { display: block; max-width: 100%; margin: 16px auto; }
+  .vcontent pre { margin: 0; padding: 18px 20px; white-space: pre-wrap; word-break: break-word; font-family: "Cascadia Code","Consolas",ui-monospace,monospace; font-size: 12.5px; line-height: 1.6; color: #e6ebf3; }
+  .vmsg { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; color: var(--text-3); padding: 20px; text-align: center; }
+  .vmsg .big { font-size: 34px; }
+  .xls { border-collapse: collapse; font-size: 12px; margin: 4px 12px 16px; }
+  .xls td, .xls th { border: 1px solid #2a2f38; padding: 5px 9px; color: #dfe4ec; white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+  .xls th { background: #1a1c23; font-weight: 600; position: sticky; top: 0; }
+  .xls-name { padding: 12px 14px 6px; font-weight: 600; color: #b8adff; font-size: 12.5px; }
+  .xls-note { padding: 0 14px 12px; font-size: 11px; color: #6b7383; }
+  .docx { padding: 20px 26px; max-width: 780px; margin: 0 auto; color: #e6ebf3; font-size: 13.5px; line-height: 1.7; }
+  .docx h1 { font-size: 19px; font-weight: 600; margin: 18px 0 8px; color: #fff; }
+  .docx h2 { font-size: 15.5px; font-weight: 600; margin: 16px 0 6px; color: #eef1f6; }
+  .docx p { margin: 6px 0; white-space: pre-wrap; }
+  .docx li { margin: 4px 0 4px 22px; list-style: disc; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v6c0 4-3 6.5-7 8-4-1.5-7-4-7-8V7z"/></svg></div>
+    <div class="htitle"><b>LevA 대시보드</b><span>온디바이스 AI · 파일 캐싱 현황</span></div>
+    <div class="hspacer"></div>
+    <span id="obsPill" class="pill off"><span class="dot"></span>감시 데몬</span>
+    <span id="cachePill" class="pill off"><span class="dot"></span>캐싱 워커</span>
+    <button id="reload" class="btn">새로고침</button>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-pane="p-overview">개요</button>
+    <button class="tab" data-pane="p-keywords">키워드 <span id="kwBadge" class="badge"></span></button>
+    <button class="tab" data-pane="p-chat">채팅 로그 <span id="chatBadge" class="badge"></span></button>
+  </nav>
+
+  <!-- 개요 -->
+  <section id="p-overview" class="pane active">
+    <div class="scroll">
+      <div class="grid">
+        <div class="metric"><div class="label">🗂️ 캐시 완료</div><div id="mCached" class="num">–</div><div class="sub">키워드·요약 생성됨</div></div>
+        <div class="metric"><div class="label">⚠️ 처리 실패</div><div id="mFailed" class="num">–</div><div class="sub">사유는 설정 탭에서</div></div>
+        <div class="metric"><div class="label">🏷️ 키워드</div><div id="mKeywords" class="num">–</div><div class="sub">고유 키워드 수</div></div>
+        <div class="metric"><div class="label">💬 대화 수</div><div id="mChats" class="num">–</div><div class="sub">누적 질문·답변</div></div>
+      </div>
+      <div class="cols">
+        <div class="card"><h3>최근 캐시</h3><div id="recent"><div class="empty">불러오는 중…</div></div></div>
+        <div class="card"><h3>감시 폴더</h3><div id="folders"><div class="empty">불러오는 중…</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 키워드 → 파일 → 뷰어 -->
+  <section id="p-keywords" class="pane">
+    <div class="kwlayout" id="kwlayout">
+      <div class="kwpanel kw">
+        <input id="kwSearch" type="text" placeholder="키워드 검색…" />
+        <div id="kwList" class="kwlist"></div>
+      </div>
+      <div class="kwpanel files filepanel">
+        <h3 style="margin:0" id="fileHead">키워드를 선택하세요</h3>
+        <div id="fileList" class="filelist"><div class="empty">왼쪽에서 키워드를 선택하면 포함된 파일이 표시됩니다.</div></div>
+      </div>
+      <div class="kwpanel viewer" id="kvcol">
+        <div class="vhead">
+          <div class="vicon" id="kvIcon">📄</div>
+          <div class="vmeta"><b id="kvName"></b><span id="kvPath"></span></div>
+          <button id="kvExternal" class="btn">외부 앱</button>
+          <button id="kvClose" class="btn">✕</button>
+        </div>
+        <div class="vcontent" id="kvContent"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 채팅 로그 + 인라인 뷰어 -->
+  <section id="p-chat" class="pane">
+    <div class="chatwrap" id="chatwrap">
+      <div class="chatcol">
+        <div class="chathead">
+          <h3>채팅 로그</h3>
+          <button id="clearChat" class="btn">로그 지우기</button>
+        </div>
+        <div id="chatList" class="chatlist"><div class="empty">불러오는 중…</div></div>
+      </div>
+      <div class="viewercol" id="viewercol">
+        <div class="vhead">
+          <div class="vicon" id="vIcon">📄</div>
+          <div class="vmeta"><b id="vName"></b><span id="vPath"></span></div>
+          <button id="vExternal" class="btn">외부 앱</button>
+          <button id="vClose" class="btn">✕</button>
+        </div>
+        <div class="vcontent" id="vContent"></div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let kwMap = {};        // keyword -> [{filename, path, summary}]
+    let kwSorted = [];     // 정렬된 키워드
+    let selectedKw = null;
+
+    document.querySelectorAll(".tab").forEach((t) => {
+      t.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
+        document.querySelectorAll(".pane").forEach((x) => x.classList.remove("active"));
+        t.classList.add("active");
+        $(t.dataset.pane).classList.add("active");
+      });
+    });
+
+    function fmtTime(ts) {
+      try { return new Date(ts).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }); }
+      catch (e) { return ""; }
+    }
+
+    // ---- 파일 참조 링크(뷰어 지원 확장자만) ----
+    const CODE_EXT = [".py", ".js", ".ts", ".jsx", ".tsx", ".vue", ".c", ".cpp", ".cc", ".cxx", ".h", ".hpp",
+      ".cs", ".java", ".go", ".rs", ".rb", ".php", ".swift", ".kt", ".scala",
+      ".sh", ".bat", ".ps1", ".sql", ".yaml", ".yml", ".toml", ".ini", ".lua", ".pl", ".r"];
+    const VIEWER_EXTS = new Set([
+      ".txt", ".md", ".log", ".csv", ".json", ".xml", ".html", ".htm", ".rtf", ...CODE_EXT,
+      ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".pdf", ".xlsx", ".docx",
+    ]);
+    function extOf(n) { const i = n.lastIndexOf("."); return i >= 0 ? n.slice(i).toLowerCase() : ""; }
+    async function fileIndexFromCache() {
+      let entries = [];
+      try { entries = await window.leva.cacheList(); } catch (e) {}
+      const map = {};
+      entries.forEach((e) => { if (e.filename && e.path && VIEWER_EXTS.has(extOf(e.filename))) map[e.filename] = e.path; });
+      return map;
+    }
+    function appendLinkified(parent, text, fileMap) {
+      const names = Object.keys(fileMap).sort((a, b) => b.length - a.length);
+      if (!names.length) { parent.appendChild(document.createTextNode(text)); return; }
+      const esc = names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+      const re = new RegExp("(" + esc.join("|") + ")", "g");
+      let last = 0, m;
+      while ((m = re.exec(text)) !== null) {
+        if (m.index > last) parent.appendChild(document.createTextNode(text.slice(last, m.index)));
+        const name = m[0];
+        const link = document.createElement("span");
+        link.className = "filelink"; link.textContent = name; link.title = "열기: " + fileMap[name];
+        link.addEventListener("click", () => openInlineViewer(fileMap[name]));
+        parent.appendChild(link);
+        last = m.index + name.length;
+        if (re.lastIndex === m.index) re.lastIndex++;
+      }
+      if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
+    }
+
+    async function refreshCore() {
+      let obs = {}, cache = {};
+      try { obs = await window.leva.observerStatus(); } catch (e) {}
+      try { cache = await window.leva.cacheStatus(); } catch (e) {}
+      $("obsPill").className = "pill " + (obs.running ? "on" : "off");
+      $("obsPill").innerHTML = '<span class="dot"></span>감시 데몬';
+      $("cachePill").className = "pill " + (cache.running ? "on" : "off");
+      $("cachePill").innerHTML = '<span class="dot"></span>캐싱 워커';
+
+      let entries = [];
+      try { entries = await window.leva.cacheList(); } catch (e) {}
+      const cached = entries.filter((e) => e.status === "CACHED");
+      $("mCached").textContent = cached.length;
+      $("mFailed").textContent = entries.filter((e) => e.status === "FAILED").length;
+
+      // 최근 캐시
+      const recent = $("recent");
+      recent.innerHTML = "";
+      if (!entries.length) recent.innerHTML = '<div class="empty">아직 캐시된 파일이 없습니다.</div>';
+      else entries.slice(0, 10).forEach((it) => {
+        const div = document.createElement("div"); div.className = "row";
+        const box = document.createElement("div"); box.className = "nm";
+        const nm = document.createElement("div"); nm.textContent = it.filename; nm.title = it.path || it.filename;
+        box.appendChild(nm);
+        if (it.status === "FAILED" && it.error_msg) { const er = document.createElement("div"); er.className = "kw"; er.style.color = "#f77"; er.textContent = it.error_msg; box.appendChild(er); }
+        else if ((it.keywords || []).length) { const kw = document.createElement("div"); kw.className = "kw"; kw.textContent = it.keywords.join(", "); box.appendChild(kw); }
+        div.appendChild(box);
+        const tag = document.createElement("span");
+        tag.className = "tag " + (it.status === "CACHED" ? "ok" : it.status === "FAILED" ? "bad" : "blue");
+        tag.textContent = it.status === "CACHED" ? "완료" : it.status === "FAILED" ? "실패" : "대기";
+        div.appendChild(tag); recent.appendChild(div);
+      });
+
+      // 감시 폴더
+      let watches = [];
+      try { watches = await window.leva.observerList(); } catch (e) {}
+      const folders = $("folders"); folders.innerHTML = "";
+      if (!watches.length) folders.innerHTML = '<div class="empty">감시 중인 폴더가 없습니다.</div>';
+      else watches.forEach((w) => {
+        const div = document.createElement("div"); div.className = "row";
+        const nm = document.createElement("span"); nm.className = "nm"; nm.textContent = w.path; nm.title = w.path; div.appendChild(nm);
+        if (w.recursive) { const t = document.createElement("span"); t.className = "tag blue"; t.textContent = "하위포함"; div.appendChild(t); }
+        folders.appendChild(div);
+      });
+
+      // 키워드 인덱스 집계
+      kwMap = {};
+      cached.forEach((e) => (e.keywords || []).forEach((k) => {
+        k = String(k).trim(); if (!k) return;
+        (kwMap[k] = kwMap[k] || []).push({ filename: e.filename, path: e.path, summary: e.summary || "" });
+      }));
+      kwSorted = Object.keys(kwMap).sort((a, b) => kwMap[b].length - kwMap[a].length || a.localeCompare(b));
+      $("mKeywords").textContent = kwSorted.length;
+      $("kwBadge").textContent = kwSorted.length ? "(" + kwSorted.length + ")" : "";
+      renderKeywords();
+    }
+
+    function renderKeywords() {
+      const q = ($("kwSearch").value || "").trim().toLowerCase();
+      const list = $("kwList"); list.innerHTML = "";
+      const shown = kwSorted.filter((k) => !q || k.toLowerCase().includes(q));
+      if (!shown.length) { list.innerHTML = '<div class="empty">키워드가 없습니다.</div>'; return; }
+      shown.forEach((k) => {
+        const div = document.createElement("div"); div.className = "kwitem" + (k === selectedKw ? " active" : "");
+        const name = document.createElement("span"); name.textContent = k; name.style.overflow = "hidden"; name.style.textOverflow = "ellipsis"; name.style.whiteSpace = "nowrap";
+        const cnt = document.createElement("span"); cnt.className = "cnt"; cnt.textContent = kwMap[k].length;
+        div.appendChild(name); div.appendChild(cnt);
+        div.addEventListener("click", () => { selectedKw = k; renderKeywords(); renderFiles(); });
+        list.appendChild(div);
+      });
+    }
+
+    function renderFiles() {
+      const head = $("fileHead"), list = $("fileList");
+      if (!selectedKw || !kwMap[selectedKw]) { head.textContent = "키워드를 선택하세요"; list.innerHTML = '<div class="empty">왼쪽에서 키워드를 선택하세요.</div>'; return; }
+      const files = kwMap[selectedKw];
+      head.innerHTML = "'" + selectedKw + "' 포함 파일 <span style='color:var(--text-3);font-weight:400'>(" + files.length + ")</span>";
+      list.innerHTML = "";
+      files.forEach((f) => {
+        const div = document.createElement("div"); div.className = "row"; div.style.cursor = "pointer";
+        const box = document.createElement("div"); box.className = "nm";
+        const nm = document.createElement("div"); nm.textContent = f.filename; nm.title = "열기: " + (f.path || f.filename);
+        box.appendChild(nm);
+        if (f.summary) { const s = document.createElement("div"); s.className = "kw"; s.style.color = "var(--text-3)"; s.textContent = f.summary; box.appendChild(s); }
+        div.appendChild(box);
+        const open = document.createElement("span"); open.className = "tag blue"; open.textContent = "열기";
+        div.appendChild(open);
+        div.addEventListener("click", () => openKwViewer(f.path));
+        list.appendChild(div);
+      });
+    }
+
+    async function refreshChat() {
+      let log = [];
+      try { log = await window.leva.getChatLog(); } catch (e) {}
+      $("mChats").textContent = log.length;
+      $("chatBadge").textContent = log.length ? "(" + log.length + ")" : "";
+      const list = $("chatList"); list.innerHTML = "";
+      if (!log.length) { list.innerHTML = '<div class="empty">아직 대화 기록이 없습니다. 오브를 클릭해 대화해 보세요.</div>'; return; }
+      const fileMap = await fileIndexFromCache();
+      log.slice().reverse().forEach((c) => {
+        const qa = document.createElement("div"); qa.className = "qa";
+        const meta = document.createElement("div"); meta.className = "meta"; meta.textContent = fmtTime(c.ts);
+        const q = document.createElement("div"); q.className = "q";
+        q.innerHTML = '<span class="who u">나</span>'; const qt = document.createElement("span"); qt.textContent = c.question; q.appendChild(qt);
+        const a = document.createElement("div"); a.className = "a";
+        a.innerHTML = '<span class="who a">LevA</span>';
+        const at = document.createElement("span"); appendLinkified(at, c.answer || "", fileMap); a.appendChild(at);
+        qa.appendChild(meta); qa.appendChild(q); qa.appendChild(a); list.appendChild(qa);
+      });
+    }
+
+    // ---- 인라인 뷰어 (채팅·키워드 공용, 2:8 분할) ----
+    const IMG_EXT = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tif", ".tiff"];
+    const HTML_EXT = [".html", ".htm"];
+    const TXT_EXT = [".txt", ".md", ".log", ".csv", ".json", ".xml", ".rtf", ...CODE_EXT];
+    function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+    async function renderFileInto(vc, icon, nameEl, pathEl, filePath) {
+      vc.innerHTML = '<div class="vmsg"><p>불러오는 중…</p></div>';
+      let info = null;
+      try { info = await window.leva.fileInfo(filePath); } catch (e) {}
+      if (!info) { vc.innerHTML = '<div class="vmsg"><div class="big">🚫</div><p>파일 정보를 불러올 수 없습니다.</p></div>'; return; }
+      nameEl.textContent = info.name || "";
+      pathEl.textContent = info.path || "";
+      const ext = info.ext || "";
+      icon.textContent = ext === ".pdf" ? "📕" : IMG_EXT.includes(ext) ? "🖼️" : "📄";
+      if (!info.exists) { vc.innerHTML = '<div class="vmsg"><div class="big">🚫</div><p>파일을 찾을 수 없습니다.</p></div>'; return; }
+      if (ext === ".pdf" || HTML_EXT.includes(ext)) {
+        vc.innerHTML = '<iframe src="' + info.fileUrl + '"></iframe>';
+      } else if (IMG_EXT.includes(ext)) {
+        vc.innerHTML = '<img src="' + info.fileUrl + '" alt="' + escapeHtml(info.name) + '" />';
+      } else if (TXT_EXT.includes(ext)) {
+        let r = { ok: false };
+        try { r = await window.leva.readFile(info.path); } catch (e) {}
+        if (r.ok) { const pre = document.createElement("pre"); pre.textContent = r.text; vc.innerHTML = ""; vc.appendChild(pre); }
+        else vc.innerHTML = '<div class="vmsg"><div class="big">⚠️</div><p>' + escapeHtml(r.error || "읽기 실패") + "</p></div>";
+      } else if (ext === ".xlsx") {
+        let r = { ok: false };
+        try { r = await window.leva.readXlsx(info.path); } catch (e) {}
+        vc.innerHTML = r.ok ? xlsxTableHtml(r.sheets) : '<div class="vmsg"><div class="big">⚠️</div><p>' + escapeHtml(r.error || "읽기 실패") + "</p></div>";
+      } else if (ext === ".docx") {
+        let r = { ok: false };
+        try { r = await window.leva.readDocx(info.path); } catch (e) {}
+        vc.innerHTML = r.ok ? docxHtml(r.blocks) : '<div class="vmsg"><div class="big">⚠️</div><p>' + escapeHtml(r.error || "읽기 실패") + "</p></div>";
+      } else {
+        vc.innerHTML = '<div class="vmsg"><div class="big">📎</div><p>미리보기를 지원하지 않는 형식입니다.<br>“외부 앱”으로 열어 주세요.</p></div>';
+      }
+    }
+
+    function docxHtml(blocks) {
+      if (!blocks || !blocks.length) return '<div class="vmsg"><p>내용이 없습니다.</p></div>';
+      let html = '<div class="docx">';
+      blocks.forEach((b) => {
+        if (b.type === "space") { html += "<br>"; return; }
+        const t = escapeHtml(b.text || "");
+        if (b.type === "h1") html += "<h1>" + t + "</h1>";
+        else if (b.type === "h2") html += "<h2>" + t + "</h2>";
+        else if (b.type === "li") html += "<li>" + t + "</li>";
+        else html += "<p>" + t + "</p>";
+      });
+      return html + "</div>";
+    }
+
+    function xlsxTableHtml(sheets) {
+      if (!sheets || !sheets.length) return '<div class="vmsg"><p>표가 없습니다.</p></div>';
+      let html = "";
+      sheets.forEach((sh) => {
+        html += '<div class="xls-name">' + escapeHtml(sh.name) + "</div><table class=\"xls\">";
+        sh.rows.forEach((row, ri) => {
+          html += "<tr>";
+          row.forEach((c) => { const t = ri === 0 ? "th" : "td"; html += "<" + t + ">" + escapeHtml(c) + "</" + t + ">"; });
+          html += "</tr>";
+        });
+        html += "</table>";
+        if (sh.truncated) html += '<div class="xls-note">일부만 표시(최대 500행 × 40열)</div>';
+      });
+      return html;
+    }
+
+    // 채팅 로그 인라인 뷰어
+    let curChatPath = "";
+    function openInlineViewer(filePath) {
+      curChatPath = filePath;
+      $("chatwrap").classList.add("split");
+      renderFileInto($("vContent"), $("vIcon"), $("vName"), $("vPath"), filePath);
+    }
+    $("vClose").addEventListener("click", () => { $("chatwrap").classList.remove("split"); $("vContent").innerHTML = ""; curChatPath = ""; });
+    $("vExternal").addEventListener("click", () => { if (curChatPath) window.leva.openExternalFile(curChatPath); });
+
+    // 키워드 탭 인라인 뷰어 (키워드 리스트 숨기고 파일리스트 2 : 뷰어 8)
+    let curKwPath = "";
+    function openKwViewer(filePath) {
+      curKwPath = filePath;
+      $("kwlayout").classList.add("viewing");
+      renderFileInto($("kvContent"), $("kvIcon"), $("kvName"), $("kvPath"), filePath);
+    }
+    $("kvClose").addEventListener("click", () => { $("kwlayout").classList.remove("viewing"); $("kvContent").innerHTML = ""; curKwPath = ""; });
+    $("kvExternal").addEventListener("click", () => { if (curKwPath) window.leva.openExternalFile(curKwPath); });
+
+    $("kwSearch").addEventListener("input", renderKeywords);
+    $("reload").addEventListener("click", () => { refreshCore(); refreshChat(); });
+    $("clearChat").addEventListener("click", async () => {
+      try { await window.leva.clearChatLog(); } catch (e) {}
+      refreshChat();
+    });
+    if (window.leva.onChatLogged) window.leva.onChatLogged(() => refreshChat());
+    if (window.leva.onCacheEvent) window.leva.onCacheEvent((ev) => { if (ev && (ev.phase === "done" || ev.phase === "error")) refreshCore(); });
+    window.addEventListener("keydown", (e) => { if (e.key === "Escape") window.leva.closeDashboard(); });
+
+    refreshCore();
+    refreshChat();
+    setInterval(() => { refreshCore(); }, 6000);
+  </script>
+</body>
+</html>

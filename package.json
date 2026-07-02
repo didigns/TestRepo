@@ -5,10 +5,17 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win"
+    "build:lite": "electron-builder --win",
+    "build:full": "electron-builder --win --config electron-builder.full.json",
+    "build:all": "npm run build:lite && npm run build:full",
+    "dist": "npm run build:all"
   },
   "author": "",
   "license": "MIT",
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "exceljs": "^4.4.0"
+  },
   "devDependencies": {
     "electron": "^43.0.0",
     "electron-builder": "^26.15.3"
@@ -16,8 +23,49 @@
   "build": {
     "appId": "com.leva.aisummary",
     "productName": "LevAAISummary",
+    "asar": false,
+    "directories": {
+      "output": "dist/lite"
+    },
+    "files": [
+      "**/*",
+      "!dist/**",
+      "!.Models/**",
+      "!llamacpp/**",
+      "!Test/**",
+      "!pybin/**",
+      "!build_py/**",
+      "!**/__pycache__/**",
+      "!electron-builder.full.json",
+      "!build.ps1",
+      "!build_python.ps1",
+      "!diag_cache.py",
+      "!*.md"
+    ],
+    "extraFiles": [
+      {
+        "from": "llamacpp",
+        "to": "llamacpp",
+        "filter": ["**/*"]
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "pybin",
+        "to": "pybin",
+        "filter": ["**/*"]
+      }
+    ],
     "win": {
-      "target": "portable"
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "LevAAISummary-${version}-lite-Setup.${ext}",
+      "shortcutName": "LevA",
+      "uninstallDisplayName": "LevA AI Summary"
     }
   }
 }

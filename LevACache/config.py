@@ -15,6 +15,10 @@ DEFAULT_CONFIG = {
     "nCtx": 8192,
     "nGpuLayers": 0,        # GPU 오프로딩 레이어 수(0=CPU)
     "startupTimeout": 120,  # 서버 기동 대기(초)
+    # 레이턴시 최적화 파라미터
+    "nThreads": 0,          # 생성 스레드 수(0=llama.cpp 자동, 권장: 물리 코어 수)
+    "flashAttn": "auto",    # Flash Attention: on|off|auto (어텐션 가속·KV 메모리↓)
+    "useMlock": True,       # 모델을 RAM에 상주시켜 페이지폴트/스왑 방지
     # 캐시 DB
     "dbPath": "",           # 비우면 사용자 데이터 경로에 leva-cache.db
     # PDF 처리

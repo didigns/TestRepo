@@ -1,0 +1,9 @@
+# Git LFS — llamacpp 대용량 바이너리(및 모델)를 LFS로 추적한다.
+# (GitHub 파일당 100MB 제한 우회. 실제 추적되는 대상은 llamacpp 폴더의
+#  exe/dll 등이며, pybin·루트의 exe/dll은 .gitignore로 이미 제외됨.)
+*.dll  filter=lfs diff=lfs merge=lfs -text
+*.exe  filter=lfs diff=lfs merge=lfs -text
+*.lib  filter=lfs diff=lfs merge=lfs -text
+*.pdb  filter=lfs diff=lfs merge=lfs -text
+*.gguf filter=lfs diff=lfs merge=lfs -text
+*.bin  filter=lfs diff=lfs merge=lfs -text

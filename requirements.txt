@@ -1,0 +1,11 @@
+# LevAAISummary Python 의존성
+# 설치:  pip install -r requirements.txt
+
+# 폴더 감시 (필수)
+watchdog>=4.0.0
+
+# 파일 본문 추출 (권장 — 없으면 해당 형식이 캐싱 실패)
+pypdf>=4.0.0          # PDF 텍스트 추출
+PyMuPDF>=1.24.0       # 스캔 PDF를 이미지로 렌더링(비전 OCR용)
+python-docx>=1.1.0    # .docx 텍스트
+openpyxl>=3.1.0       # .xlsx 텍스트

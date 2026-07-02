@@ -53,10 +53,27 @@ class LlamaManager:
             "-c", str(self.cfg.get("nCtx", 8192)),
             "-ngl", str(self.cfg.get("nGpuLayers", 0)),
         ]
-        self._log(f"llama-server 기동: model={key}")
-        self.proc = subprocess.Popen(
-            args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
+        # ---- 레이턴시 최적화 플래그 ----
+        n_threads = self.cfg.get("nThreads", 0)
+        if n_threads and int(n_threads) > 0:
+            args += ["-t", str(int(n_threads)), "-tb", str(int(n_threads))]
+        fa = self.cfg.get("flashAttn", "auto")
+        if fa:
+            args += ["-fa", str(fa)]          # 어텐션 가속 + KV 메모리 절감
+        if self.cfg.get("useMlock", True):
+            args += ["--mlock"]                # 가중치를 RAM에 상주(콜드 페이지폴트 제거)
+        self._log(f"llama-server 기동: model={key} args={args[1:]}")
+        try:
+            self.proc = subprocess.Popen(
+                args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+        except FileNotFoundError:
+            raise RuntimeError(
+                f"llama-server.exe를 찾을 수 없습니다: {exe} "
+                "(설정 → AI 캐싱에서 경로를 확인하세요.)"
+            )
+        except OSError as e:
+            raise RuntimeError(f"llama-server 실행 실패: {e}")
         self._wait_ready()
         self.loaded_key = key
 
@@ -77,7 +94,12 @@ class LlamaManager:
                 time.sleep(1)
         raise RuntimeError("llama-server 기동 시간 초과")
 
-    def chat(self, prompt, images=None, *, max_tokens=768, temperature=0.2, timeout=300):
+    def _build_messages(self, prompt, images, system):
+        messages = []
+        # 고정 system 메시지를 맨 앞에 두면 llama-server 프롬프트 캐싱이
+        # 그 프리픽스 KV를 재사용해 TTFT가 줄어든다.
+        if system:
+            messages.append({"role": "system", "content": system})
         content = [{"type": "text", "text": prompt}]
         for img in images or []:
             with open(img, "rb") as f:
@@ -86,11 +108,18 @@ class LlamaManager:
                 "type": "image_url",
                 "image_url": {"url": "data:image/png;base64," + b64},
             })
+        messages.append({"role": "user", "content": content})
+        return messages
+
+    def chat(self, prompt, images=None, *, system=None, max_tokens=1024,
+             temperature=0.2, timeout=300):
         payload = {
-            "messages": [{"role": "user", "content": content}],
+            "messages": self._build_messages(prompt, images, system),
             "max_tokens": max_tokens,
             "temperature": temperature,
             "stream": False,
+            # Gemma 4 / Qwen 계열의 사고(thinking) 모드를 꺼서 토큰 낭비·JSON 깨짐 방지
+            "chat_template_kwargs": {"enable_thinking": False},
         }
         req = urllib.request.Request(
             self.base_url + "/v1/chat/completions",
@@ -101,6 +130,44 @@ class LlamaManager:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             data = json.loads(r.read().decode("utf-8"))
         return data["choices"][0]["message"]["content"]
+
+    def chat_stream(self, prompt, on_delta, images=None, *, system=None,
+                    max_tokens=2048, temperature=0.3, timeout=300):
+        """SSE 스트리밍으로 응답을 받으며 on_delta(조각)을 호출. 전체 문자열 반환."""
+        payload = {
+            "messages": self._build_messages(prompt, images, system),
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "stream": True,
+            "chat_template_kwargs": {"enable_thinking": False},
+        }
+        req = urllib.request.Request(
+            self.base_url + "/v1/chat/completions",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        parts = []
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            for raw in r:
+                line = raw.decode("utf-8", "replace").strip()
+                if not line or not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    obj = json.loads(data)
+                    delta = (obj.get("choices") or [{}])[0].get("delta", {}).get("content", "")
+                except Exception:
+                    delta = ""
+                if delta:
+                    parts.append(delta)
+                    try:
+                        on_delta(delta)
+                    except Exception:
+                        pass
+        return "".join(parts)
 
     def stop(self):
         if self.proc and self.proc.poll() is None:

@@ -1,0 +1,53 @@
+{
+  "appId": "com.leva.aisummary",
+  "productName": "LevAAISummary",
+  "asar": false,
+  "directories": {
+    "output": "dist/full"
+  },
+  "files": [
+    "**/*",
+    "!dist/**",
+    "!.Models/**",
+    "!llamacpp/**",
+    "!Test/**",
+    "!pybin/**",
+    "!build_py/**",
+    "!**/__pycache__/**",
+    "!electron-builder.full.json",
+    "!build.ps1",
+    "!build_python.ps1",
+    "!diag_cache.py",
+    "!*.md"
+  ],
+  "extraFiles": [
+    {
+      "from": "llamacpp",
+      "to": "llamacpp",
+      "filter": ["**/*"]
+    },
+    {
+      "from": ".Models",
+      "to": ".Models",
+      "filter": ["**/*"]
+    }
+  ],
+  "extraResources": [
+    {
+      "from": "pybin",
+      "to": "pybin",
+      "filter": ["**/*"]
+    }
+  ],
+  "win": {
+    "target": "nsis"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "artifactName": "LevAAISummary-${version}-full-Setup.${ext}",
+    "shortcutName": "LevA",
+    "uninstallDisplayName": "LevA AI Summary"
+  }
+}

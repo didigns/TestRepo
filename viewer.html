@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>LevA 뷰어</title>
+<style>
+  :root {
+    --bg: #0e0f13; --panel: #16171d; --field: #101116;
+    --border: rgba(255,255,255,0.08); --border-strong: rgba(255,255,255,0.14);
+    --text: #f3f5f9; --text-2: #a2abbb; --text-3: #6b7383;
+    --accent: #7c6cff; --grad: linear-gradient(135deg,#7c6cff,#a855f7);
+    --font: "Pretendard","Inter",-apple-system,"Segoe UI","맑은 고딕",sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; font-family: var(--font); background: var(--bg); color: var(--text);
+    height: 100vh; overflow: hidden; display: flex; flex-direction: column; font-size: 13px; -webkit-font-smoothing: antialiased; }
+
+  header { flex: none; display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--border); }
+  .ficon { width: 32px; height: 32px; border-radius: 9px; flex: none; background: var(--grad); display: flex; align-items: center; justify-content: center; font-size: 15px; }
+  .fmeta { min-width: 0; flex: 1; }
+  .fmeta b { font-size: 14px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fmeta span { font-size: 11px; color: var(--text-3); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .btn { background: #242730; color: var(--text); border: 1px solid var(--border-strong); border-radius: 9px; padding: 8px 13px; cursor: pointer; font-size: 12px; font-family: var(--font); flex: none; }
+  .btn:hover { background: #2c303a; }
+  .btn.primary { background: var(--grad); border: none; color: #fff; }
+
+  .content { flex: 1; overflow: auto; background: #0b0c0f; position: relative; }
+  .content iframe { width: 100%; height: 100%; border: none; background: #fff; }
+  .content img { display: block; max-width: 100%; margin: 20px auto; }
+  pre { margin: 0; padding: 22px 26px; white-space: pre-wrap; word-break: break-word;
+    font-family: "Cascadia Code","Consolas",ui-monospace,monospace; font-size: 13px; line-height: 1.6; color: #e6ebf3; }
+  .xls { border-collapse: collapse; font-size: 12.5px; margin: 6px 16px 20px; }
+  .xls td, .xls th { border: 1px solid #2a2f38; padding: 6px 11px; color: #dfe4ec; white-space: nowrap; max-width: 360px; overflow: hidden; text-overflow: ellipsis; }
+  .xls th { background: #1a1c23; font-weight: 600; position: sticky; top: 0; }
+  .xls-name { padding: 14px 16px 6px; font-weight: 600; color: #b8adff; font-size: 13px; }
+  .xls-note { padding: 0 16px 14px; font-size: 11px; color: #6b7383; }
+  .docx { padding: 26px 30px; max-width: 820px; margin: 0 auto; color: #e6ebf3; font-size: 14px; line-height: 1.75; }
+  .docx h1 { font-size: 21px; font-weight: 600; margin: 20px 0 9px; color: #fff; }
+  .docx h2 { font-size: 16.5px; font-weight: 600; margin: 17px 0 7px; color: #eef1f6; }
+  .docx p { margin: 7px 0; white-space: pre-wrap; }
+  .docx li { margin: 5px 0 5px 24px; list-style: disc; white-space: pre-wrap; }
+  .msg { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 14px; color: var(--text-3); }
+  .msg .big { font-size: 40px; }
+  .msg p { margin: 0; font-size: 13.5px; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="ficon" id="ficon">📄</div>
+    <div class="fmeta"><b id="fname">불러오는 중…</b><span id="fpath"></span></div>
+    <button id="external" class="btn">외부 앱으로 열기</button>
+    <button id="close" class="btn">닫기</button>
+  </header>
+  <div class="content" id="content"></div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const IMAGE = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tif", ".tiff"];
+    const HTML = [".html", ".htm"];
+    const TEXT = [".txt", ".md", ".log", ".csv", ".json", ".xml", ".rtf",
+      ".py", ".js", ".ts", ".jsx", ".tsx", ".vue", ".c", ".cpp", ".cc", ".cxx", ".h", ".hpp",
+      ".cs", ".java", ".go", ".rs", ".rb", ".php", ".swift", ".kt", ".scala",
+      ".sh", ".bat", ".ps1", ".sql", ".yaml", ".yml", ".toml", ".ini", ".lua", ".pl", ".r"];
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    function docxHtml(blocks) {
+      if (!blocks || !blocks.length) return '<div class="msg"><p>내용이 없습니다.</p></div>';
+      let html = '<div class="docx">';
+      blocks.forEach((b) => {
+        if (b.type === "space") { html += "<br>"; return; }
+        const t = escapeHtml(b.text || "");
+        if (b.type === "h1") html += "<h1>" + t + "</h1>";
+        else if (b.type === "h2") html += "<h2>" + t + "</h2>";
+        else if (b.type === "li") html += "<li>" + t + "</li>";
+        else html += "<p>" + t + "</p>";
+      });
+      return html + "</div>";
+    }
+
+    function xlsxTableHtml(sheets) {
+      if (!sheets || !sheets.length) return '<div class="msg"><p>표가 없습니다.</p></div>';
+      let html = "";
+      sheets.forEach((sh) => {
+        html += '<div class="xls-name">' + escapeHtml(sh.name) + "</div><table class=\"xls\">";
+        sh.rows.forEach((row, ri) => {
+          html += "<tr>";
+          row.forEach((c) => { const t = ri === 0 ? "th" : "td"; html += "<" + t + ">" + escapeHtml(c) + "</" + t + ">"; });
+          html += "</tr>";
+        });
+        html += "</table>";
+        if (sh.truncated) html += '<div class="xls-note">일부만 표시(최대 500행 × 40열)</div>';
+      });
+      return html;
+    }
+
+    async function render(info) {
+      const content = $("content");
+      if (!info || !info.path) {
+        $("fname").textContent = "파일 없음";
+        content.innerHTML = '<div class="msg"><div class="big">🚫</div><p>표시할 파일이 없습니다.</p></div>';
+        return;
+      }
+      $("fname").textContent = info.name || "";
+      $("fpath").textContent = info.path || "";
+      const ext = info.ext || "";
+      $("ficon").textContent = ext === ".pdf" ? "📕" : IMAGE.includes(ext) ? "🖼️" : "📄";
+
+      if (!info.exists) {
+        content.innerHTML = '<div class="msg"><div class="big">🚫</div><p>파일을 찾을 수 없습니다.<br>' + escapeHtml(info.path) + "</p></div>";
+        return;
+      }
+
+      if (ext === ".pdf" || HTML.includes(ext)) {
+        content.innerHTML = '<iframe src="' + info.fileUrl + '"></iframe>';
+      } else if (IMAGE.includes(ext)) {
+        content.innerHTML = '<img src="' + info.fileUrl + '" alt="' + escapeHtml(info.name) + '" />';
+      } else if (TEXT.includes(ext)) {
+        content.innerHTML = '<div class="msg"><p>불러오는 중…</p></div>';
+        let r = { ok: false };
+        try { r = await window.leva.readFile(info.path); } catch (e) {}
+        if (r.ok) {
+          const pre = document.createElement("pre");
+          pre.textContent = r.text;
+          content.innerHTML = ""; content.appendChild(pre);
+        } else {
+          content.innerHTML = '<div class="msg"><div class="big">⚠️</div><p>' + escapeHtml(r.error || "읽기 실패") + "</p></div>";
+        }
+      } else if (ext === ".xlsx") {
+        content.innerHTML = '<div class="msg"><p>표 불러오는 중…</p></div>';
+        let r = { ok: false };
+        try { r = await window.leva.readXlsx(info.path); } catch (e) {}
+        content.innerHTML = r.ok ? xlsxTableHtml(r.sheets) : '<div class="msg"><div class="big">⚠️</div><p>' + escapeHtml(r.error || "읽기 실패") + "</p></div>";
+      } else if (ext === ".docx") {
+        content.innerHTML = '<div class="msg"><p>문서 불러오는 중…</p></div>';
+        let r = { ok: false };
+        try { r = await window.leva.readDocx(info.path); } catch (e) {}
+        content.innerHTML = r.ok ? docxHtml(r.blocks) : '<div class="msg"><div class="big">⚠️</div><p>' + escapeHtml(r.error || "읽기 실패") + "</p></div>";
+      } else {
+        content.innerHTML = '<div class="msg"><div class="big">📎</div><p>이 형식은 미리보기를 지원하지 않습니다.<br>아래 “외부 앱으로 열기”를 눌러 주세요.</p></div>';
+      }
+    }
+
+    $("external").addEventListener("click", async () => {
+      const info = await window.leva.getViewerFile();
+      if (info && info.path) window.leva.openExternalFile(info.path);
+    });
+    $("close").addEventListener("click", () => window.close());
+    window.addEventListener("keydown", (e) => { if (e.key === "Escape") window.close(); });
+
+    // 다른 파일로 갱신될 때
+    if (window.leva.onViewerFile) window.leva.onViewerFile((info) => render(info));
+
+    (async () => {
+      let info = null;
+      try { info = await window.leva.getViewerFile(); } catch (e) {}
+      render(info);
+    })();
+  </script>
+</body>
+</html>

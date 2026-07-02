@@ -109,13 +109,22 @@ def prepare(path, ext, *, pdf_max_pages=5):
         return {"kind": "images", "images": [path], "text": "", "note": "image"}
 
     if ext == ".pdf":
-        imgs = _pdf_to_images(path, pdf_max_pages)
-        if imgs:
-            return {"kind": "images", "images": imgs, "text": "", "note": "pdf->image"}
+        # 텍스트가 있으면 그대로 추출해 텍스트 모델(Gemma)로 처리
         text = _read_pdf_text(path)
         if text and text.strip():
-            return {"kind": "text", "images": [], "text": _truncate(text), "note": "pdf->text(fallback)"}
-        return {"kind": "text", "images": [], "text": "", "note": "pdf-empty"}
+            return {"kind": "text", "images": [], "text": _truncate(text), "note": "pdf->text"}
+        # 텍스트가 없으면(스캔본) 이미지로 렌더링해 비전 모델(MiniCPM) OCR
+        imgs = _pdf_to_images(path, pdf_max_pages)
+        if imgs:
+            return {"kind": "images", "images": imgs, "text": "", "note": "pdf->image(scanned)"}
+        # 텍스트도 이미지도 못 얻음 → 원인을 note에 명시
+        if text is None and imgs is None:
+            note = "PDF 처리 라이브러리 없음 (pip install pypdf PyMuPDF)"
+        elif text is None:
+            note = "pypdf 미설치로 텍스트 추출 불가 (pip install pypdf)"
+        else:
+            note = "PDF에서 텍스트를 찾지 못함 (스캔본이면 pip install PyMuPDF)"
+        return {"kind": "text", "images": [], "text": "", "note": note}
 
     # 텍스트 계열
     if ext == ".docx":
@@ -125,6 +134,7 @@ def prepare(path, ext, *, pdf_max_pages=5):
     else:
         text = _read_txt(path)
     if text is None:
+        dep = {".docx": "python-docx", ".xlsx": "openpyxl"}.get(ext, ext)
         return {"kind": "text", "images": [], "text": "",
-                "note": "missing-optional-dep(" + ext + ")"}
+                "note": f"{ext} 처리 라이브러리 없음 (pip install {dep})"}
     return {"kind": "text", "images": [], "text": _truncate(text), "note": "text"}

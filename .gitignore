@@ -186,3 +186,21 @@ $RECYCLE.BIN/
 
 # Built Visual Studio Code Extensions
 *.vsix
+
+### ===== LevAAISummary 프로젝트 =====
+
+# 다운로드 모델(용량 큼)은 제외
+.Models/
+
+# 빌드 산출물 제외
+pybin/
+build_py/
+dist/
+
+# 로컬 캐시 DB / 로그(있을 경우)
+*.db
+leva-chatlog.json
+
+# llamacpp 는 실행 시 GitHub 릴리스에서 자동 다운로드하므로 git에서 제외한다.
+# (대용량 바이너리를 리포에 안 올려 100MB 제한/LFS 없이 푸시 가능)
+llamacpp/
