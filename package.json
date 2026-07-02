@@ -1,0 +1,23 @@
+{
+  "name": "levaaisummary",
+  "version": "1.0.0",
+  "description": "LevAAISummary - 온디바이스 LLM AI 비서 HUD (윈도우 우측 하단 원형 오버레이)",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^43.0.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.leva.aisummary",
+    "productName": "LevAAISummary",
+    "win": {
+      "target": "portable"
+    }
+  }
+}
