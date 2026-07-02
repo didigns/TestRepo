@@ -42,13 +42,6 @@
       "!diag_cache.py",
       "!*.md"
     ],
-    "extraFiles": [
-      {
-        "from": "llamacpp",
-        "to": "llamacpp",
-        "filter": ["**/*"]
-      }
-    ],
     "extraResources": [
       {
         "from": "pybin",

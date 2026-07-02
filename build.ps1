@@ -11,7 +11,7 @@
   Output:
     dist\lite\LevAAISummary-<ver>-lite-Setup.exe   (no .Models)
     dist\full\LevAAISummary-<ver>-full-Setup.exe   (with .Models)
-  llamacpp is included in BOTH builds.
+  llamacpp is NOT bundled — the app downloads it (GPU-detected) on first launch.
 #>
 param(
   [ValidateSet("all", "lite", "full")]
@@ -39,12 +39,8 @@ Info "root folder: $root"
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) { Fail "Node.js is required." }
 if (-not (Get-Command npm  -ErrorAction SilentlyContinue)) { Fail "npm is required." }
 
-# llamacpp must always be present
-$serverExe = "$root\llamacpp\llama-server.exe"
-if (-not (Test-Path -LiteralPath $serverExe)) {
-  Fail "Missing llamacpp\llama-server.exe ($serverExe). Put the llamacpp folder (binaries/DLLs) first."
-}
-Info "llamacpp OK: $serverExe"
+# llamacpp is NOT bundled anymore; the app downloads it on first run (GPU-detected).
+Info "llamacpp is not bundled — the app downloads it on first launch."
 
 # full build needs .Models (create empty if missing, with warning)
 if ($Variant -ne "lite") {

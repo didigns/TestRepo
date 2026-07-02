@@ -2,16 +2,16 @@
 
 Windows용 NSIS 설치형 인스톨러를 **두 종류**로 만듭니다.
 
-| 빌드 | llamacpp | .Models(다운로드 모델) | 산출물 |
-|---|---|---|---|
-| **lite** | 포함 | 미포함(설치 후 사용자가 다운로드) | `dist/lite/LevAAISummary-<버전>-lite-Setup.exe` |
-| **full** | 포함 | 포함 | `dist/full/LevAAISummary-<버전>-full-Setup.exe` |
+| 빌드 | .Models(다운로드 모델) | 산출물 |
+|---|---|---|
+| **lite** | 미포함(설치 후 사용자가 다운로드) | `dist/lite/LevAAISummary-<버전>-lite-Setup.exe` |
+| **full** | 포함 | `dist/full/LevAAISummary-<버전>-full-Setup.exe` |
 
-`llamacpp`(llama-server.exe + DLL)는 두 빌드 모두 **무조건 포함**됩니다.
+**`llamacpp`는 더 이상 인스톨러에 포함하지 않습니다.** 앱이 **첫 실행 시** GPU를 감지해(NVIDIA→CUDA, 아니면 Vulkan/CPU) GitHub 릴리스에서 자동으로 받아 설치폴더의 `llamacpp\`에 풉니다. 덕분에 인스톨러가 가볍고, git/LFS에 대용량 바이너리를 넣을 필요도 없습니다.
 
 ## 사전 준비
 1. Node.js / npm 설치.
-2. 프로젝트 루트에 `llamacpp/` 폴더(빌드된 llama.cpp 바이너리·DLL) 배치 — **필수**. 용량이 큰 테스트용 gguf는 빼고 실행에 필요한 파일만 두는 것을 권장합니다.
+2. Python 3.x + pip (빌드 머신용 — 데몬 exe 빌드에 필요. `build.ps1`이 requirements + PyInstaller 자동 설치).
 3. **full** 빌드를 하려면 루트에 `.Models/` 폴더를 두고 모델(gguf)을 넣어 둡니다. (lite 빌드는 불필요)
 
 ## 빌드

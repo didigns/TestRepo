@@ -22,11 +22,6 @@
   ],
   "extraFiles": [
     {
-      "from": "llamacpp",
-      "to": "llamacpp",
-      "filter": ["**/*"]
-    },
-    {
       "from": ".Models",
       "to": ".Models",
       "filter": ["**/*"]
