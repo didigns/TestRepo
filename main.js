@@ -985,6 +985,54 @@ function downloadToFile(u, dest, onProgress) {
   });
 }
 
+// 하위 폴더 포함해서 파일명을 재귀 검색
+function findFileRec(dir, name) {
+  let ents = [];
+  try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return null; }
+  for (const e of ents) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) { const r = findFileRec(p, name); if (r) return r; }
+    else if (e.name.toLowerCase() === name.toLowerCase()) return p;
+  }
+  return null;
+}
+
+// zip 내부에 build/bin 등 하위폴더가 있으면 대상 파일이 있는 폴더의 내용을 루트로 끌어올린다.
+function flattenExtract(dir, anchorName) {
+  if (fs.existsSync(path.join(dir, anchorName))) return;
+  const found = findFileRec(dir, anchorName);
+  if (!found) return;
+  const srcDir = path.dirname(found);
+  if (path.resolve(srcDir) === path.resolve(dir)) return;
+  for (const f of fs.readdirSync(srcDir)) {
+    try { fs.renameSync(path.join(srcDir, f), path.join(dir, f)); } catch (e) {}
+  }
+}
+
+// 빠른 압축해제: Windows 10+ 내장 tar(bsdtar) 우선, 실패 시 adm-zip 폴백.
+function extractZip(zipPath, destDir) {
+  return new Promise((resolve) => {
+    const fallback = () => {
+      try {
+        const AdmZip = require("adm-zip");
+        new AdmZip(zipPath).extractAllTo(destDir, true);
+        resolve({ ok: true, method: "adm-zip" });
+      } catch (e) { resolve({ ok: false, error: String(e.message || e) }); }
+    };
+    let cp;
+    try {
+      cp = spawn("tar", ["-xf", zipPath, "-C", destDir], { windowsHide: true });
+    } catch (e) { return fallback(); }
+    let errored = false;
+    cp.on("error", () => { errored = true; fallback(); });
+    cp.on("exit", (code) => {
+      if (errored) return;
+      if (code === 0) resolve({ ok: true, method: "tar" });
+      else fallback();
+    });
+  });
+}
+
 async function ensureLlamaCpp(onProgress) {
   const serverExe = path.join(llamaCppDir(), "llama-server.exe");
   if (fs.existsSync(serverExe)) return { ok: true, already: true };
@@ -1001,7 +1049,6 @@ async function ensureLlamaCpp(onProgress) {
   if (!urls.length) return { ok: false, backend, error: "Windows용 llama.cpp 자산을 찾지 못했습니다. llamacpp 폴더를 직접 넣어 주세요." };
 
   try { fs.mkdirSync(llamaCppDir(), { recursive: true }); } catch (e) {}
-  const AdmZip = require("adm-zip");
   for (let i = 0; i < urls.length; i++) {
     const tmp = path.join(llamaCppDir(), "_dl_" + i + ".zip");
     emit({ phase: "download", backend: usedBackend, index: i + 1, count: urls.length });
@@ -1009,16 +1056,11 @@ async function ensureLlamaCpp(onProgress) {
       await downloadToFile(urls[i], tmp, (p) => emit({ phase: "download", backend: usedBackend, index: i + 1, count: urls.length, ...p }));
     } catch (e) { return { ok: false, backend: usedBackend, error: "다운로드 실패: " + (e.message || e) }; }
     emit({ phase: "extract", backend: usedBackend, index: i + 1, count: urls.length });
-    try {
-      const zip = new AdmZip(tmp);
-      zip.getEntries().forEach((entry) => {
-        if (entry.isDirectory) return;
-        // zip 내부에 build/bin 등 하위경로가 있어도 파일명만 llamacpp/ 로 평면 추출
-        fs.writeFileSync(path.join(llamaCppDir(), path.basename(entry.entryName)), entry.getData());
-      });
-    } catch (e) { return { ok: false, backend: usedBackend, error: "압축 해제 실패: " + (e.message || e) }; }
+    const ex = await extractZip(tmp, llamaCppDir()); // 네이티브 tar → adm-zip 폴백
+    if (!ex.ok) return { ok: false, backend: usedBackend, error: "압축 해제 실패: " + ex.error };
     try { fs.unlinkSync(tmp); } catch (e) {}
   }
+  flattenExtract(llamaCppDir(), "llama-server.exe"); // 하위폴더로 풀렸으면 루트로 끌어올림
   const ok = fs.existsSync(serverExe);
   if (ok) saveConfig({ llamaServerExe: serverExe });
   return { ok, backend: usedBackend, error: ok ? "" : "llama-server.exe 를 찾지 못했습니다(압축 구조 확인)." };
