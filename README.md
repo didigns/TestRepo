@@ -93,6 +93,8 @@ npm run dist
 
 설정 창의 **🧠 AI 캐싱** 섹션에서 `llama-server.exe`, Gemma gguf, MiniCPM-V gguf, mmproj 경로를 지정하고 최근 캐시 목록을 확인할 수 있습니다.
 
-구성 요소(`LevACache/`): `config.py`(설정), `router.py`(확장자→모델), `extract.py`(텍스트/이미지 준비), `llama_manager.py`(서버 스왑), `summarize.py`(키워드·요약 프롬프트/파싱), `db.py`(SQLite), `worker.py`(NDJSON 데몬).
+캐싱은 3단계 파이프라인으로 진행됩니다: ① 본문 준비(텍스트 추출/비전 OCR, OCR 결과는 DB에 저장돼 재사용) → ② 청크 임베딩(이후 의미검색·채팅 가능) → ③ 키워드·요약(Gemma). 폴더 스캔과 파일 이벤트 배치는 '단계 우선'으로 처리해 vision↔text 모델 스왑을 배치당 최대 1회로 줄입니다.
+
+구성 요소(`LevACache/`): `stages.py`(3단계 파이프라인, 의존성 주입), `worker.py`(NDJSON 데몬 + ctx 어댑터), `config.py`(설정), `router.py`(확장자→모델), `extract.py`(텍스트/이미지 준비), `llama_manager.py`(서버 스왑), `summarize.py`(키워드·요약 프롬프트/파싱), `db.py`(SQLite 메타/키워드/OCR), `vectors.py`(청크 벡터 저장·검색).
 
 > 참고: 캐싱에는 llama.cpp 바이너리와 gguf 모델이 필요합니다. PDF를 이미지로 렌더링하려면 `PyMuPDF`, docx/xlsx 텍스트 추출에는 `python-docx`/`openpyxl`가 있으면 좋습니다(없으면 해당 형식은 건너뜀).

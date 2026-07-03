@@ -146,7 +146,7 @@ function extOfName(n) { const i = n.lastIndexOf("."); return i >= 0 ? n.slice(i)
 
 async function buildFileIndex() {
   let entries = [];
-  try { entries = await window.leva.cacheList(); } catch (e) {}
+  try { entries = (await window.leva.cacheList()) || []; } catch (e) {}
   const map = {};
   entries.forEach((e) => {
     if (e.filename && e.path && VIEWER_EXTS.has(extOfName(e.filename))) map[e.filename] = e.path;
@@ -302,19 +302,44 @@ if (window.leva.onFsEvent) {
   });
 }
 
-// ---- AI 캐싱 이벤트 → 말풍선 -----------------------------------------
+// ---- AI 캐싱 이벤트 → 말풍선 (집계) -----------------------------------
+// 파일마다 말풍선을 띄우면 폴더 스캔 때 폭주하므로,
+// 짧은 시간(1.2초) 안의 완료/실패를 모아 하나로 요약한다.
 if (window.leva.onCacheEvent) {
+  const agg = { done: [], fails: [], firstErr: "", lastKw: "", timer: null };
+  function flushCacheBubbles() {
+    agg.timer = null;
+    if (agg.done.length) {
+      const n = agg.done.length;
+      let msg = "🧠 캐싱 완료: " + agg.done[0] + (n > 1 ? " 외 " + (n - 1) + "개" : "");
+      if (n === 1 && agg.lastKw) msg += "\n키워드: " + agg.lastKw;
+      addBubble(msg, "ai");
+    }
+    if (agg.fails.length) {
+      const n = agg.fails.length;
+      const why = agg.firstErr ? "\n" + String(agg.firstErr).slice(0, 120) : "";
+      if (n === 1) addBubble("⚠️ 캐싱 실패: " + agg.fails[0] + why, "ai");
+      else addBubble("⚠️ 캐싱 실패 " + n + "개: " + agg.fails[0] + " 외" + why, "ai");
+    }
+    agg.done = []; agg.fails = []; agg.firstErr = ""; agg.lastKw = "";
+  }
   window.leva.onCacheEvent((ev) => {
     if (!ev) return;
-    const name = ev.filename || "";
-    if (ev.phase === "start") {
-      addBubble("🧠 캐싱 시작: " + name, "ai");
-    } else if (ev.phase === "done") {
-      const kw = (ev.keywords || []).slice(0, 4).join(", ");
-      addBubble("🧠 캐싱 완료: " + name + (kw ? "\n키워드: " + kw : ""), "ai");
-    } else if (ev.phase === "error") {
-      const why = ev.error ? "\n" + String(ev.error).slice(0, 120) : "";
-      addBubble("⚠️ 캐싱 실패: " + name + why, "ai");
+    if (ev.phase === "discovered") {
+      // 폴더 수집 완료 → 시작을 집계로 한 번만 알림
+      if (ev.count) addBubble("🧠 캐싱 시작: 파일 " + ev.count + "개 수집", "ai");
+      return;
     }
+    if (ev.phase === "done") {
+      agg.done.push(ev.filename || "");
+      agg.lastKw = (ev.keywords || []).slice(0, 4).join(", ");
+    } else if (ev.phase === "error") {
+      agg.fails.push(ev.filename || "");
+      if (!agg.firstErr && ev.error) agg.firstErr = ev.error;
+    } else {
+      return; // start/progress 등은 HUD에선 조용히
+    }
+    clearTimeout(agg.timer);
+    agg.timer = setTimeout(flushCacheBubbles, 1200);
   });
 }

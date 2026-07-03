@@ -23,6 +23,19 @@ DEFAULT_CONFIG = {
     "dbPath": "",           # 비우면 사용자 데이터 경로에 leva-cache.db
     # PDF 처리
     "pdfMaxPages": 5,       # 비전 처리 시 렌더링할 최대 페이지
+    # 반복(loop) 추출: 본문을 chunkChars 자로 잘라 최대 maxChunks 조각 순차 처리
+    "chunkChars": 2000,
+    "maxChunks": 12,
+    # 의미검색(임베딩): 비우면 토큰검색 사용
+    "embedModel": "",       # 임베딩 모델 gguf (예: bge-m3)
+    "embedPort": 8081,      # 임베딩 전용 서버 포트(메인과 분리)
+    "embedNCtx": 2048,
+    "embedPooling": "mean",
+    "embedMinScore": 0.25,  # 코사인 최소 유사도
+    # 청크 임베딩(검색 정확도용, 분석용보다 촘촘하게)
+    "embedChunkChars": 1000,
+    "embedMaxChunks": 0,      # 청크 개수 제한(0=무제한, 본문 전체 임베딩)
+    "embedBatch": 64,         # 임베딩 요청 1건당 청크 수(무제한 청크 대비 배치 처리)
 }
 
 

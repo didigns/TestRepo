@@ -8,7 +8,13 @@ import hashlib
 import os
 import tempfile
 
-MAX_TEXT_CHARS = 12000  # 프롬프트 폭주 방지
+# 본문 상한. 과거 12,000자였으나 이는 긴 문서(소설 등)의 98% 이상을
+# 임베딩에서 누락시켜 RAG 검색을 무력화했다(다크메이지 사례: 89만 자 중 1.3%만 임베딩).
+# 프롬프트 폭주 방지는 하류에서 이미 보장된다:
+#   - 키워드(3단계): run_text_extraction 이 chunkChars×maxChunks(기본 24,000자)로 자체 제한
+#   - 채팅 주입: _augment 예산 7,000자 상한 + 매칭 청크 기준 주입
+# 여기서는 병리적 초대형 파일만 막는 안전 상한으로만 쓴다.
+MAX_TEXT_CHARS = 2_000_000
 
 
 def file_hash(path, chunk=1 << 20):

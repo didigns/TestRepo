@@ -21,6 +21,10 @@ const DEFAULT_CONFIG = {
   visionModel: "",     // MiniCPM-V gguf (pdf/이미지)
   visionMmproj: "",    // MiniCPM-V mmproj gguf
   cachePort: 8080,
+  chunkChars: 2000,   // 반복 추출: 본문 조각 크기(문자)
+  maxChunks: 12,      // 최대 조각 수
+  embedModel: "",     // 임베딩 모델 gguf (비우면 토큰검색)
+  embedPort: 8081,    // 임베딩 전용 서버 포트
 };
 
 function configPath() {
@@ -126,7 +130,9 @@ function startDaemon() {
   });
   daemon.stdout.setEncoding("utf8"); // 멀티바이트(한글) 경계 안전 디코딩
   daemon.stdout.on("data", onDaemonStdout);
-  daemon.stderr.on("data", () => {}); // 로그는 무시
+  daemon.stderr.on("data", (d) => {
+    if (!app.isPackaged) console.error("[observer]", String(d).trim());
+  });
   daemon.on("exit", () => {
     daemon = null;
     daemonReady = false;
@@ -255,10 +261,11 @@ function isBlockedFile(fp) {
 let cacheProc = null;
 let cacheReady = false;
 let cacheError = null;
+let cacheRestarts = 0;   // 연속 크래시 자동 재시작 횟수
+let appQuitting = false; // 종료 중에는 재시작하지 않음
 let cacheReqId = 0;
 const cachePending = new Map();
 let cacheBuf = "";
-const cacheDebounce = new Map(); // path -> timer
 
 function cacheConfigPath() {
   return configPath();
@@ -297,10 +304,21 @@ function startCacheWorker() {
   });
   cacheProc.stdout.setEncoding("utf8");
   cacheProc.stdout.on("data", onCacheStdout);
-  cacheProc.stderr.on("data", () => {});
+  cacheProc.stderr.on("data", (d) => {
+    if (!app.isPackaged) console.error("[cache]", String(d).trim());
+  });
   cacheProc.on("exit", () => {
     cacheProc = null;
     cacheReady = false;
+    // 예기치 않은 종료(크래시)면 자동 재시작 — 연속 5회까지, 3초 간격.
+    // (죽은 채 방치되면 목록·캐싱·채팅이 전부 조용히 멈춘다)
+    if (!appQuitting && cacheRestarts < 5) {
+      cacheRestarts++;
+      cacheError = "캐시 워커가 종료되어 재시작합니다… (" + cacheRestarts + "/5)";
+      setTimeout(() => { if (!cacheProc && !appQuitting) startCacheWorker(); }, 3000);
+    } else if (!appQuitting) {
+      cacheError = "캐시 워커가 반복 종료되어 중지했습니다. 모델/경로 확인 후 앱을 재시작하세요.";
+    }
   });
 }
 
@@ -321,6 +339,12 @@ function handleCacheMessage(msg) {
   if (!msg || typeof msg !== "object") return;
   if (msg.type === "ready") {
     cacheReady = true;
+    cacheRestarts = 0; // 정상 기동 → 재시작 카운터 리셋
+    // 워커가 알려준 지원 확장자로 필터를 동기화(JS·Python 이중 정의 드리프트 방지)
+    if (Array.isArray(msg.exts) && msg.exts.length) {
+      CACHE_EXTS.clear();
+      msg.exts.forEach((x) => CACHE_EXTS.add(String(x).toLowerCase()));
+    }
     pruneCache();     // 지워진 파일의 캐시 정리
     backfillCache();
     return;
@@ -366,25 +390,32 @@ function sendCacheCommand(type, extra = {}, { expectResult = true, timeout = 600
   });
 }
 
-// 동일 파일 연속 이벤트 디바운스 후 캐싱 요청(fire-and-forget)
+// 파일 이벤트 마이크로 배칭: 짧은 시간에 몰린 이벤트를 모아 한 번에
+// cache-batch 로 보낸다. 워커가 단계 우선으로 처리해 vision↔text
+// 모델 스왑이 배치당 최대 1회로 줄어든다.
+const cacheBatch = new Set(); // 대기 중인 경로들
+let cacheBatchTimer = null;
+function flushCacheBatch() {
+  cacheBatchTimer = null;
+  if (!cacheBatch.size) return;
+  const paths = [...cacheBatch];
+  cacheBatch.clear();
+  sendCacheCommand("cache-batch", { paths }, { expectResult: false }).catch(() => {});
+}
 function enqueueCache(fp) {
   if (!cacheProc) return;
   if (isBlockedFile(fp)) return; // 시스템/임시 파일은 캐싱 안 함
-  if (cacheDebounce.has(fp)) clearTimeout(cacheDebounce.get(fp));
-  cacheDebounce.set(fp, setTimeout(() => {
-    cacheDebounce.delete(fp);
-    sendCacheCommand("cache", { path: fp }, { expectResult: false }).catch(() => {});
-  }, 1500));
+  cacheBatch.add(fp);
+  // 새 이벤트가 오면 타이머 연장(조용해진 뒤 1.5초에 일괄 전송)
+  if (cacheBatchTimer) clearTimeout(cacheBatchTimer);
+  cacheBatchTimer = setTimeout(flushCacheBatch, 1500);
 }
 
 // 삭제/이동된 경로의 캐시 엔트리 제거(폴더면 하위 전부). fire-and-forget.
 function uncacheFile(fp, isDir) {
   if (!fp) return;
   // 대기 중이던 캐싱 예약이 있으면 취소
-  if (cacheDebounce.has(fp)) {
-    clearTimeout(cacheDebounce.get(fp));
-    cacheDebounce.delete(fp);
-  }
+  cacheBatch.delete(fp);
   if (!cacheProc) return;
   sendCacheCommand("uncache", { path: fp, prefix: !!isDir }, { expectResult: false }).catch(() => {});
 }
@@ -401,6 +432,8 @@ async function backfillCache() {
   if (!cfg.enableCache) return;
   const paths = (cfg.watchedFolders || []).map((w) => w.path);
   if (!paths.length) return;
+  // 시작 시에도 수집·등록을 먼저 끝내 목록을 채운 뒤 분석
+  try { await sendCacheCommand("gather", { paths }); } catch (e) {}
   try { await sendCacheCommand("scan", { paths }); } catch (e) {}
 }
 
@@ -737,45 +770,75 @@ function safeParseKw(s) {
   try { const a = JSON.parse(s || "[]"); return Array.isArray(a) ? a : []; }
   catch (e) { return []; }
 }
+let cacheDirectErrLogged = ""; // 같은 원인은 1회만 로그(반복 폴링 스팸 방지)
 function readCacheDbDirect() {
   try {
     const { DatabaseSync } = require("node:sqlite");
     const db = new DatabaseSync(cacheDbPath(), { readOnly: true });
+    try { db.exec("PRAGMA busy_timeout=3000"); } catch (e) {}
+    // SELECT * 로 읽어 컬럼 구성 차이(예: stage 미마이그레이션)에도 목록이 비지 않게 한다.
     const rows = db.prepare(
-      "SELECT path, filename, ext, model_key, keywords, summary, status, error_msg, cached_at " +
-      "FROM file_cache ORDER BY cached_at DESC LIMIT 300"
+      "SELECT * FROM file_cache ORDER BY cached_at DESC LIMIT 500"
     ).all();
     db.close();
     return rows.map((r) => ({ ...r, keywords: safeParseKw(r.keywords) }));
   } catch (e) {
+    // 원인을 삼키지 말고 남긴다 — node:sqlite 미지원인지 잠금인지 구분해야
+    // "스캔 중 목록이 빈다" 류의 문제를 추적할 수 있다.
+    const m = String((e && e.message) || e);
+    if (m !== cacheDirectErrLogged) {
+      cacheDirectErrLogged = m;
+      console.error("[cache] DB 직접 읽기 실패 → 워커 폴백:", m);
+    }
     return null; // node:sqlite 미지원/DB 없음/잠금 → 워커 폴백
   }
 }
+let lastGoodCacheList = null; // 마지막 성공 목록 — 조회 실패 시 빈 배열 대신 반환
 ipcMain.handle("cache-list", async () => {
   const direct = readCacheDbDirect();
-  if (direct) return direct;
-  try { const r = await sendCacheCommand("list"); return r.entries || []; }
-  catch (e) { return []; }
+  if (direct) { lastGoodCacheList = direct; return direct; }
+  // 직접 읽기 실패 시에만 워커로 폴백하되, 스캔 중이면 워커가 바빠 응답이 늦으므로
+  // 짧은 타임아웃으로 UI가 멈추지 않게 한다.
+  try {
+    const r = await sendCacheCommand("list", {}, { timeout: 4000 });
+    lastGoodCacheList = r.entries || [];
+    return lastGoodCacheList;
+  } catch (e) {
+    // 실패를 빈 배열로 위장하면 UI가 "파일 없음"으로 목록을 덮어써 버린다.
+    // 마지막 성공 목록(없으면 null)을 반환해 UI가 기존 화면을 유지하게 한다.
+    return lastGoodCacheList;
+  }
 });
 ipcMain.handle("cache-file", async (_e, filePath) => {
   return sendCacheCommand("cache", { path: filePath, force: true });
 });
 ipcMain.handle("cache-clear-db", async () => {
-  // DB를 비우고(직접→워커 폴백), 감시 폴더 전체를 백그라운드로 재캐싱한다.
+  // 워커의 clear 를 우선 사용한다 — DB 삭제뿐 아니라 진행 중인 캐싱(스캔)을
+  // 강제 중지하고 대기 중인 구 명령도 폐기하기 때문. clear 는 경량 명령이라
+  // 워커가 스캔 중이어도 즉시 응답한다.
   let cleared = false;
   try {
-    const { DatabaseSync } = require("node:sqlite");
-    const db = new DatabaseSync(cacheDbPath());
-    db.exec("DELETE FROM file_cache");
-    db.close();
-    cleared = true;
-  } catch (e) { /* node:sqlite 미지원 → 워커로 폴백 */ }
+    const r = await sendCacheCommand("clear", {}, { timeout: 8000 });
+    cleared = !!(r && r.ok);
+  } catch (e) { /* 워커 미기동/무응답 → 직접 삭제 폴백 */ }
   if (!cleared) {
-    try { const r = await sendCacheCommand("clear"); cleared = !!(r && r.ok); } catch (e) {}
+    try {
+      const { DatabaseSync } = require("node:sqlite");
+      const db = new DatabaseSync(cacheDbPath());
+      try { db.exec("PRAGMA busy_timeout=3000"); } catch (e) {}
+      db.exec("DELETE FROM file_cache");
+      // 청크 벡터도 함께 삭제(안 지우면 옛 파일이 의미검색에 유령처럼 남음)
+      try { db.exec("DELETE FROM chunk_vectors"); } catch (e) { /* 테이블 없음 무시 */ }
+      db.close();
+      cleared = true;
+    } catch (e) { /* node:sqlite 미지원 */ }
   }
   if (!cleared) return { ok: false, error: "DB 초기화에 실패했습니다." };
   const cfg = loadConfig();
   const paths = (cfg.watchedFolders || []).map((w) => w.path);
+  // 1) 먼저 파일을 수집·등록(대기)해 목록을 채운다(분석 전, 완료까지 대기).
+  try { await sendCacheCommand("gather", { paths }); } catch (e) {}
+  // 2) 그 다음 분석을 시작한다(백그라운드).
   try { sendCacheCommand("scan", { paths }, { expectResult: false }); } catch (e) {}
   return { ok: true };
 });
@@ -783,6 +846,8 @@ ipcMain.handle("cache-rescan", async () => {
   const cfg = loadConfig();
   const paths = (cfg.watchedFolders || []).map((w) => w.path);
   await sendCacheCommand("prune", {}, { expectResult: false }).catch(() => {});
+  // 수집·등록을 먼저 끝내 목록을 채운 뒤 분석 시작
+  await sendCacheCommand("gather", { paths }).catch(() => {});
   return sendCacheCommand("scan", { paths });
 });
 ipcMain.handle("pick-file", async (_e, kind) => {
@@ -821,6 +886,13 @@ const MODEL_CATALOG = [
     desc: "이미지 인식에 필요한 mmproj · f16 · 약 1.0GB",
     url: "https://huggingface.co/openbmb/MiniCPM-V-4.6-gguf/resolve/main/mmproj-model-f16.gguf",
     assignTo: "visionMmproj",
+  },
+  {
+    key: "embedModel",
+    name: "BGE-M3 임베딩",
+    desc: "의미검색(RAG)용 임베딩 · 없으면 파일명/키워드 검색만 동작 · f16 · 약 1.2GB",
+    url: "https://huggingface.co/CompendiumLabs/bge-m3-gguf/resolve/main/bge-m3-f16.gguf",
+    assignTo: "embedModel",
   },
 ];
 
@@ -1247,6 +1319,7 @@ app.whenReady().then(async () => {
 });
 
 app.on("before-quit", () => {
+  appQuitting = true;
   if (daemon) {
     try { sendCommand("shutdown").catch(() => {}); } catch (e) {}
     setTimeout(() => { if (daemon) daemon.kill(); }, 300);

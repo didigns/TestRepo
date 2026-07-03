@@ -6,7 +6,7 @@ PROMPT_TEXT = (
     "당신은 문서 색인 비서입니다. 아래 문서 내용을 분석해서 "
     "핵심 키워드와 한두 문장 요약을 JSON으로만 답하세요.\n"
     "형식: {{\"keywords\": [\"...\", \"...\"], \"summary\": \"...\"}}\n"
-    "키워드는 5~8개, 한국어로. 다른 말은 하지 마세요.\n\n"
+    "키워드는 개수 제한 없이 내용에 필요한 만큼, 한국어로. 다른 말은 하지 마세요.\n\n"
     "[문서: {name}]\n{body}"
 )
 
@@ -14,7 +14,7 @@ PROMPT_VISION = (
     "당신은 문서/이미지 색인 비서입니다. 첨부한 이미지를 보고 "
     "핵심 키워드와 한두 문장 요약을 JSON으로만 답하세요.\n"
     "형식: {{\"keywords\": [\"...\", \"...\"], \"summary\": \"...\"}}\n"
-    "키워드는 5~8개, 한국어로. 다른 말은 하지 마세요.\n\n"
+    "키워드는 개수 제한 없이 내용에 필요한 만큼, 한국어로. 다른 말은 하지 마세요.\n\n"
     "[파일: {name}]"
 )
 
@@ -66,7 +66,7 @@ def _extract_json_obj(text):
 def _norm_keywords(kws):
     if isinstance(kws, str):
         kws = [k.strip() for k in re.split(r"[,\n]", kws) if k.strip()]
-    return [str(k).strip() for k in (kws or []) if str(k).strip()][:12]
+    return [str(k).strip() for k in (kws or []) if str(k).strip()]
 
 
 def parse_result(raw):
@@ -92,3 +92,70 @@ def parse_result(raw):
 
     # 3) 최후 폴백: 앞부분을 요약으로
     return [], text.strip()[:300]
+
+
+# ============================================================
+# 반복(loop / map-refine) 추출
+# 긴 본문을 N자로 잘라 조각을 하나씩 돌리며,
+# "지금까지의 키워드 + 이번 조각"을 주어 키워드를 누적하고 요약을 갱신한다.
+# SLM은 컨텍스트가 길수록 품질이 떨어지므로 조각을 짧게 유지한다.
+# ============================================================
+
+PROMPT_ITER = (
+    "당신은 문서 색인 비서입니다. 긴 문서를 여러 조각으로 나눠 순서대로 읽고 있습니다.\n"
+    "지금까지 정리한 키워드: {prev}\n"
+    "아래는 문서 '{name}' 의 {i}/{n} 번째 조각입니다. 이 조각의 내용을 반영해 "
+    "키워드 목록을 갱신하세요(기존 키워드는 유지하고, 새로 필요한 것을 추가·보완). "
+    "그리고 지금까지 읽은 내용을 바탕으로 한두 문장 요약을 갱신하세요.\n"
+    "JSON으로만 답하세요. 형식: {{\"keywords\": [\"...\", \"...\"], \"summary\": \"...\"}}\n"
+    "키워드는 개수 제한 없이 한국어로. 다른 말은 하지 마세요.\n\n"
+    "[조각 {i}/{n}]\n{body}"
+)
+
+
+def build_iter_prompt(name, prev_keywords, body, i, n):
+    prev = ", ".join(prev_keywords) if prev_keywords else "(아직 없음)"
+    return PROMPT_ITER.format(prev=prev, name=name, i=i, n=n, body=body or "(빈 조각)")
+
+
+def split_body(body, size):
+    """본문을 size(문자) 단위로 자른다. 빈 본문은 빈 리스트."""
+    body = (body or "").strip()
+    if not body:
+        return []
+    if size <= 0 or len(body) <= size:
+        return [body]
+    return [body[i:i + size] for i in range(0, len(body), size)]
+
+
+def merge_keywords(prev, new):
+    """대소문자 무시 중복 제거, 순서 유지로 키워드 누적."""
+    seen = {k.lower(): True for k in prev}
+    out = list(prev)
+    for k in new:
+        lk = k.lower()
+        if lk not in seen:
+            seen[lk] = True
+            out.append(k)
+    return out
+
+
+def run_text_extraction(chat, name, body, *, chunk_size=2000, max_parts=12, on_progress=None):
+    """본문을 조각내어 반복 추출. chat(prompt)->str 호출.
+    반환: (keywords, summary). 조각이 1개면 사실상 단일 호출과 동일.
+    """
+    chunks = split_body(body, chunk_size)
+    if not chunks:
+        return [], ""
+    chunks = chunks[:max_parts]
+    n = len(chunks)
+    keywords, summary = [], ""
+    for idx, chunk in enumerate(chunks, 1):
+        if on_progress:
+            on_progress(idx, n)
+        raw = chat(build_iter_prompt(name, keywords, chunk, idx, n))
+        kws, s = parse_result(raw)
+        keywords = merge_keywords(keywords, kws)
+        if s:
+            summary = s
+    return keywords, summary

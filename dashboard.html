@@ -226,7 +226,7 @@
     function extOf(n) { const i = n.lastIndexOf("."); return i >= 0 ? n.slice(i).toLowerCase() : ""; }
     async function fileIndexFromCache() {
       let entries = [];
-      try { entries = await window.leva.cacheList(); } catch (e) {}
+      try { entries = (await window.leva.cacheList()) || []; } catch (e) {}
       const map = {};
       entries.forEach((e) => { if (e.filename && e.path && VIEWER_EXTS.has(extOf(e.filename))) map[e.filename] = e.path; });
       return map;
@@ -259,8 +259,10 @@
       $("cachePill").className = "pill " + (cache.running ? "on" : "off");
       $("cachePill").innerHTML = '<span class="dot"></span>캐싱 워커';
 
-      let entries = [];
+      let entries = null;
       try { entries = await window.leva.cacheList(); } catch (e) {}
+      // 조회 실패(null) 시 이전 화면 유지 — 빈 배열로 위장해 "없음"으로 덮지 않는다.
+      if (!Array.isArray(entries)) return;
       const cached = entries.filter((e) => e.status === "CACHED");
       $("mCached").textContent = cached.length;
       $("mFailed").textContent = entries.filter((e) => e.status === "FAILED").length;
@@ -326,7 +328,12 @@
       const head = $("fileHead"), list = $("fileList");
       if (!selectedKw || !kwMap[selectedKw]) { head.textContent = "키워드를 선택하세요"; list.innerHTML = '<div class="empty">왼쪽에서 키워드를 선택하세요.</div>'; return; }
       const files = kwMap[selectedKw];
-      head.innerHTML = "'" + selectedKw + "' 포함 파일 <span style='color:var(--text-3);font-weight:400'>(" + files.length + ")</span>";
+      // 키워드는 LLM 출력(신뢰 불가) → innerHTML 금지, textContent로 조립
+      head.textContent = "'" + selectedKw + "' 포함 파일 ";
+      const fcnt = document.createElement("span");
+      fcnt.style.color = "var(--text-3)"; fcnt.style.fontWeight = "400";
+      fcnt.textContent = "(" + files.length + ")";
+      head.appendChild(fcnt);
       list.innerHTML = "";
       files.forEach((f) => {
         const div = document.createElement("div"); div.className = "row"; div.style.cursor = "pointer";
@@ -368,6 +375,20 @@
     const TXT_EXT = [".txt", ".md", ".log", ".csv", ".json", ".xml", ".rtf", ...CODE_EXT];
     function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 
+    // file:// URL만 허용하고 DOM 프로퍼티로 주입(HTML 문자열 조립 금지 — XSS 방지)
+    function safeFileEmbed(tag, info, msgClass) {
+      const u = String(info.fileUrl || "");
+      if (!u.startsWith("file:")) {
+        const d = document.createElement("div"); d.className = msgClass;
+        d.textContent = "허용되지 않는 파일 경로입니다.";
+        return d;
+      }
+      const el = document.createElement(tag);
+      el.src = u;
+      if (tag === "img") el.alt = info.name || "";
+      return el;
+    }
+
     async function renderFileInto(vc, icon, nameEl, pathEl, filePath) {
       vc.innerHTML = '<div class="vmsg"><p>불러오는 중…</p></div>';
       let info = null;
@@ -379,9 +400,9 @@
       icon.textContent = ext === ".pdf" ? "📕" : IMG_EXT.includes(ext) ? "🖼️" : "📄";
       if (!info.exists) { vc.innerHTML = '<div class="vmsg"><div class="big">🚫</div><p>파일을 찾을 수 없습니다.</p></div>'; return; }
       if (ext === ".pdf" || HTML_EXT.includes(ext)) {
-        vc.innerHTML = '<iframe src="' + info.fileUrl + '"></iframe>';
+        vc.innerHTML = ""; vc.appendChild(safeFileEmbed("iframe", info, "vmsg"));
       } else if (IMG_EXT.includes(ext)) {
-        vc.innerHTML = '<img src="' + info.fileUrl + '" alt="' + escapeHtml(info.name) + '" />';
+        vc.innerHTML = ""; vc.appendChild(safeFileEmbed("img", info, "vmsg"));
       } else if (TXT_EXT.includes(ext)) {
         let r = { ok: false };
         try { r = await window.leva.readFile(info.path); } catch (e) {}
@@ -457,12 +478,21 @@
       refreshChat();
     });
     if (window.leva.onChatLogged) window.leva.onChatLogged(() => refreshChat());
-    if (window.leva.onCacheEvent) window.leva.onCacheEvent((ev) => { if (ev && (ev.phase === "done" || ev.phase === "error")) refreshCore(); });
+    // 이벤트가 몰릴 때(폴더 스캔 등) 전체 재렌더를 1회로 합치는 디바운스
+    let refreshCoreTimer = null;
+    function scheduleRefreshCore(ms = 1000) {
+      clearTimeout(refreshCoreTimer);
+      refreshCoreTimer = setTimeout(() => { refreshCoreTimer = null; refreshCore(); }, ms);
+    }
+    if (window.leva.onCacheEvent) window.leva.onCacheEvent((ev) => {
+      if (ev && (ev.phase === "done" || ev.phase === "error" || ev.phase === "gather-done")) scheduleRefreshCore();
+    });
     window.addEventListener("keydown", (e) => { if (e.key === "Escape") window.leva.closeDashboard(); });
 
     refreshCore();
     refreshChat();
-    setInterval(() => { refreshCore(); }, 6000);
+    // 이벤트 기반 갱신이 기본. 폴링은 폴백으로만(30초).
+    setInterval(() => { refreshCore(); }, 30000);
   </script>
 </body>
 </html>
