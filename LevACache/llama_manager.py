@@ -242,13 +242,22 @@ class LlamaManager:
             return True
         exe = self.cfg["llamaServerExe"]
         port = self.cfg.get("embedPort") or (int(self.cfg["port"]) + 1)
+        n_ctx = int(self.cfg.get("embedNCtx", 2048))
         args = [
             exe, "-m", model, "--embedding",
             "--host", self.cfg["host"], "--port", str(port),
-            "-c", str(self.cfg.get("embedNCtx", 2048)),
+            "-c", str(n_ctx),
+            # 임베딩 모드는 입력 1건이 물리 배치(-ub, 기본 512토큰)를 넘으면
+            # HTTP 500("input is too large to process")을 반환한다.
+            # 한글 청크(embedChunkChars=1000자)는 1000토큰을 훌쩍 넘으므로
+            # 논리/물리 배치를 컨텍스트 크기와 같게 올려 준다.
+            "-b", str(n_ctx), "-ub", str(n_ctx),
             "-ngl", str(self.cfg.get("nGpuLayers", 0)),
-            "--pooling", str(self.cfg.get("embedPooling", "mean")),
         ]
+        # 풀링을 명시하지 않으면 GGUF 메타데이터의 모델 기본값(BGE-M3=CLS)을 쓴다.
+        pooling = str(self.cfg.get("embedPooling") or "").strip()
+        if pooling:
+            args += ["--pooling", pooling]
         t = self._threads()
         if t > 0:
             args += ["-t", str(t)]
@@ -300,8 +309,18 @@ class LlamaManager:
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=timeout) as r:
-                data = json.loads(r.read().decode("utf-8"))
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as r:
+                    data = json.loads(r.read().decode("utf-8"))
+            except urllib.error.HTTPError as e:
+                # 서버가 알려준 실제 원인(예: input is too large...)을 남긴다
+                try:
+                    detail = _extract_server_error(e.read().decode("utf-8", "replace"))
+                except Exception:
+                    detail = ""
+                raise RuntimeError(
+                    f"임베딩 서버 HTTP {e.code}: {detail or e.reason}"
+                ) from None
             items = sorted(data.get("data", []), key=lambda d: d.get("index", 0))
             out.extend(it["embedding"] for it in items)
             if on_progress:
@@ -310,6 +329,81 @@ class LlamaManager:
                 except Exception:
                     pass
         return out
+
+    # ---- 상태/재시작 (콘솔 UI용) -----------------------------------
+    @staticmethod
+    def _proc_rss(proc):
+        """프로세스 실메모리(WorkingSet, 바이트). 실패/미기동 시 None."""
+        if proc is None or proc.poll() is not None:
+            return None
+        if os.name != "nt":
+            return None
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class _PMC(ctypes.Structure):
+                _fields_ = [
+                    ("cb", wintypes.DWORD),
+                    ("PageFaultCount", wintypes.DWORD),
+                    ("PeakWorkingSetSize", ctypes.c_size_t),
+                    ("WorkingSetSize", ctypes.c_size_t),
+                    ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                    ("PagefileUsage", ctypes.c_size_t),
+                    ("PeakPagefileUsage", ctypes.c_size_t),
+                ]
+
+            k32 = ctypes.windll.kernel32
+            psapi = ctypes.windll.psapi
+            h = k32.OpenProcess(0x1000, False, proc.pid)  # QUERY_LIMITED_INFORMATION
+            if not h:
+                return None
+            try:
+                pmc = _PMC()
+                pmc.cb = ctypes.sizeof(_PMC)
+                if psapi.GetProcessMemoryInfo(h, ctypes.byref(pmc), pmc.cb):
+                    return int(pmc.WorkingSetSize)
+            finally:
+                k32.CloseHandle(h)
+        except Exception:
+            return None
+        return None
+
+    def status(self):
+        """엔진 상태 스냅샷: 메인(대화/비전 스왑) + 임베딩 서버."""
+        def base(key):
+            m = self.cfg.get(key) or ""
+            return os.path.basename(m) if m else ""
+        return {
+            "main": {
+                "alive": self._alive(),
+                "loaded": self.loaded_key,  # 'text' | 'vision' | None
+                "port": int(self.cfg.get("port", 8080)),
+                "textModel": base("textModel"),
+                "visionModel": base("visionModel"),
+                "rss": self._proc_rss(self.proc),
+            },
+            "embed": {
+                "alive": self._embed_alive(),
+                "configured": bool(self.cfg.get("embedModel")),
+                "port": int(self.cfg.get("embedPort")
+                            or (int(self.cfg["port"]) + 1)),
+                "model": base("embedModel"),
+                "rss": self._proc_rss(self.embed_proc),
+            },
+        }
+
+    def restart(self, target="all"):
+        """서버 재시작: 내려 두면 다음 사용 시 자동 재기동된다."""
+        if target in ("main", "all"):
+            self._stop_main()
+        if target in ("embed", "all"):
+            self._terminate(self.embed_proc)
+            self.embed_proc = None
+        return True
 
     def _terminate(self, proc):
         if proc and proc.poll() is None:

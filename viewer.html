@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <title>LevA 뷰어</title>
+<link rel="stylesheet" href="./node_modules/pdfjs-dist/web/pdf_viewer.css" />
 <style>
   :root {
     --bg: #0e0f13; --panel: #16171d; --field: #101116;
@@ -16,7 +17,10 @@
   body { margin: 0; font-family: var(--font); background: var(--bg); color: var(--text);
     height: 100vh; overflow: hidden; display: flex; flex-direction: column; font-size: 13px; -webkit-font-smoothing: antialiased; }
 
-  header { flex: none; display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--border); }
+  header { flex: none; display: flex; align-items: center; gap: 12px; padding: 12px 150px 12px 18px; border-bottom: 1px solid var(--border);
+    -webkit-app-region: drag; } /* 커스텀 타이틀바 — 우측은 창 버튼(overlay) 영역 */
+  header .btn { -webkit-app-region: no-drag; }
+  mark.hl { background: #45D6B8; color: #04231C; border-radius: 3px; padding: 0 2px; }
   .ficon { width: 32px; height: 32px; border-radius: 9px; flex: none; background: var(--grad); display: flex; align-items: center; justify-content: center; font-size: 15px; }
   .fmeta { min-width: 0; flex: 1; }
   .fmeta b { font-size: 14px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -81,6 +85,66 @@
       return el;
     }
 
+    // 근거 발췌(snippet)를 본문에서 찾아 하이라이트하고 그 위치로 스크롤.
+    // 1차: 원문 그대로(앞부분을 점점 줄여 가며). 2차: 공백을 무시한 근사 매칭 —
+    // 추출 본문과 화면 표시가 줄바꿈·공백에서 어긋나는 경우를 흡수한다.
+    function findApprox(txt, snippet) {
+      if (txt.length > 2_000_000) return null; // 매핑 비용 상한
+      const map = [];
+      let squished = "";
+      for (let i = 0; i < txt.length; i++) {
+        const c = txt[i];
+        if (c !== " " && c !== "\n" && c !== "\t" && c !== "\r") {
+          map.push(i);
+          squished += c;
+        }
+      }
+      const n = snippet.replace(/\s+/g, "");
+      if (n.length < 10) return null;
+      const j = squished.indexOf(n.slice(0, 30));
+      if (j < 0) return null;
+      const endIdx = Math.min(j + Math.min(n.length, 160), map.length - 1);
+      return { start: map[j], end: map[endIdx] + 1 };
+    }
+    function markRange(node, start, end) {
+      try {
+        const range = document.createRange();
+        range.setStart(node, start);
+        range.setEnd(node, Math.min(end, node.textContent.length));
+        const mark = document.createElement("mark");
+        mark.className = "hl";
+        range.surroundContents(mark);
+        mark.scrollIntoView({ block: "center" });
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+    function applyHighlight(root, snippet) {
+      const s = String(snippet || "").trim();
+      if (s.length < 10) return;
+      const tries = [60, 40, 25, 15];
+      const nodes = [];
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        if ((node.textContent || "").length >= 15) nodes.push(node);
+      }
+      for (const nd of nodes) {  // 1차: 원문 매칭
+        const txt = nd.textContent;
+        for (const L of tries) {
+          const needle = s.slice(0, L);
+          if (needle.length < 10) break;
+          const i = txt.indexOf(needle);
+          if (i >= 0 && markRange(nd, i, i + Math.min(s.length, 200))) return;
+        }
+      }
+      for (const nd of nodes) {  // 2차: 공백 무시 근사 매칭
+        const r = findApprox(nd.textContent, s);
+        if (r && markRange(nd, r.start, r.end)) return;
+      }
+    }
+
     function docxHtml(blocks) {
       if (!blocks || !blocks.length) return '<div class="msg"><p>내용이 없습니다.</p></div>';
       let html = '<div class="docx">';
@@ -128,7 +192,11 @@
         return;
       }
 
-      if (ext === ".pdf" || HTML.includes(ext)) {
+      if (ext === ".pdf" && info.highlight) {
+        // 근거 하이라이트: 1순위 pdf.js 렌더링 뷰(원본 레이아웃 위에 검색 하이라이트)
+        // → 실패/스캔본이면 추출 텍스트 뷰 → 그것도 없으면 내장 뷰어.
+        await showPdfRendered(info);
+      } else if (ext === ".pdf" || HTML.includes(ext)) {
         content.innerHTML = ""; content.appendChild(safeFileEmbed("iframe", info));
       } else if (IMAGE.includes(ext)) {
         content.innerHTML = ""; content.appendChild(safeFileEmbed("img", info));
@@ -140,6 +208,7 @@
           const pre = document.createElement("pre");
           pre.textContent = r.text;
           content.innerHTML = ""; content.appendChild(pre);
+          if (info.highlight) applyHighlight(content, info.highlight);
         } else {
           content.innerHTML = '<div class="msg"><div class="big">⚠️</div><p>' + escapeHtml(r.error || "읽기 실패") + "</p></div>";
         }
@@ -153,8 +222,113 @@
         let r = { ok: false };
         try { r = await window.leva.readDocx(info.path); } catch (e) {}
         content.innerHTML = r.ok ? docxHtml(r.blocks) : '<div class="msg"><div class="big">⚠️</div><p>' + escapeHtml(r.error || "읽기 실패") + "</p></div>";
+        if (r.ok && info.highlight) applyHighlight(content, info.highlight);
       } else {
         content.innerHTML = '<div class="msg"><div class="big">📎</div><p>이 형식은 미리보기를 지원하지 않습니다.<br>아래 “외부 앱으로 열기”를 눌러 주세요.</p></div>';
+      }
+    }
+
+    // ---- PDF 근거 하이라이트 뷰 3종 ----------------------------------
+    function pdfBar(label, actions) {
+      // sticky — 하이라이트로 자동 스크롤돼도 전환 버튼이 항상 보이게
+      const bar = document.createElement("div");
+      bar.style.cssText = "position:sticky; top:0; z-index:5; background:var(--bg); padding:8px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px;";
+      const span = document.createElement("span");
+      span.style.cssText = "font-size:11.5px; color:var(--text-3); margin-right:auto;";
+      span.textContent = label;
+      bar.appendChild(span);
+      actions.forEach(([text, fn]) => {
+        const b = document.createElement("button");
+        b.className = "btn"; b.textContent = text;
+        b.addEventListener("click", fn);
+        bar.appendChild(b);
+      });
+      return bar;
+    }
+
+    function showPdfEmbed(info) {
+      const content = $("content");
+      content.innerHTML = ""; content.appendChild(safeFileEmbed("iframe", info));
+    }
+
+    async function showPdfText(info) {
+      // 추출 텍스트 뷰(스캔본은 저장된 OCR) — 텍스트 하이라이트
+      const content = $("content");
+      content.innerHTML = '<div class="msg"><p>근거 위치 찾는 중…</p></div>';
+      let r = null;
+      try { r = await window.leva.extractText(info.path); } catch (e) {}
+      const body = (r && r.ok && r.text) || "";
+      if (!body.trim()) { showPdfEmbed(info); return; }
+      content.innerHTML = "";
+      content.appendChild(pdfBar("추출 텍스트 보기 — 근거 대목을 하이라이트했습니다", [
+        ["렌더링 뷰", () => showPdfRendered(info)],
+        ["내장 뷰어", () => showPdfEmbed(info)],
+      ]));
+      const pre = document.createElement("pre");
+      pre.textContent = body;
+      content.appendChild(pre);
+      applyHighlight(content, info.highlight);
+    }
+
+    async function showPdfRendered(info) {
+      // pdf.js 컴포넌트로 원본 레이아웃을 렌더링하고, 텍스트 레이어 위에
+      // 발췌 문구를 검색 하이라이트한다(스캔본은 텍스트 레이어가 없어 폴백).
+      const content = $("content");
+      content.innerHTML = '<div class="msg"><p>PDF 렌더링 중…</p></div>';
+      try {
+        const pdfjsLib = await import("./node_modules/pdfjs-dist/build/pdf.mjs");
+        const V = await import("./node_modules/pdfjs-dist/web/pdf_viewer.mjs");
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+          new URL("./node_modules/pdfjs-dist/build/pdf.worker.mjs", location.href).href;
+        const r = await window.leva.readBin(info.path);
+        if (!r || !r.ok) throw new Error((r && r.error) || "읽기 실패");
+        content.innerHTML = "";
+        content.appendChild(pdfBar("렌더링 뷰 — 근거 문구를 페이지 위에 하이라이트합니다", [
+          ["텍스트로 보기", () => showPdfText(info)],
+          ["내장 뷰어", () => showPdfEmbed(info)],
+        ]));
+        const wrap = document.createElement("div");
+        wrap.style.cssText = "position:relative; height:calc(100% - 38px);";
+        const container = document.createElement("div");
+        container.style.cssText = "position:absolute; inset:0; overflow:auto; background:#0b0c0f;";
+        const viewerDiv = document.createElement("div");
+        viewerDiv.className = "pdfViewer";
+        container.appendChild(viewerDiv);
+        wrap.appendChild(container);
+        content.appendChild(wrap);
+
+        const eventBus = new V.EventBus();
+        const linkService = new V.PDFLinkService({ eventBus });
+        const findController = new V.PDFFindController({ eventBus, linkService });
+        const viewer = new V.PDFViewer({
+          container, viewer: viewerDiv, eventBus, linkService, findController,
+        });
+        linkService.setViewer(viewer);
+        let found = false;
+        eventBus.on("updatefindmatchescount", (ev) => {
+          if (ev && ev.matchesCount && ev.matchesCount.total > 0) found = true;
+        });
+        eventBus.on("pagesinit", () => {
+          viewer.currentScaleValue = "page-width";
+          // 발췌 앞부분(공백 정규화, 단어 경계에서 자름)으로 검색
+          let q = String(info.highlight || "").replace(/\s+/g, " ").trim().slice(0, 40);
+          const sp = q.lastIndexOf(" ");
+          if (sp > 15) q = q.slice(0, sp);
+          if (q.length >= 6) {
+            eventBus.dispatch("find", {
+              source: null, type: "", query: q, caseSensitive: false,
+              entireWord: false, highlightAll: true, findPrevious: false,
+            });
+            // 텍스트 레이어가 없거나(스캔본) 못 찾으면 텍스트 뷰로 폴백
+            setTimeout(() => { if (!found) showPdfText(info); }, 2500);
+          }
+        });
+        const doc = await pdfjsLib.getDocument({ data: r.data }).promise;
+        viewer.setDocument(doc);
+        linkService.setDocument(doc, null);
+      } catch (e) {
+        // pdf.js 미설치/로드 실패 → 추출 텍스트 뷰로 폴백
+        showPdfText(info);
       }
     }
 

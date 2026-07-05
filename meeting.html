@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<title>LevA 회의</title>
+<style>
+  :root {
+    --bg: #0B0D12; --panel: #131720; --panel2: #1A1F2B;
+    --line: #252B3A; --line2: #1C212E;
+    --tx: #E8ECF4; --tx2: #9AA4B8; --tx3: #6B7690;
+    --mint: #45D6B8; --ok: #3FD68C; --warn: #F2B04B; --bad: #F26D6D;
+    --info: #5BA8F5; --rec: #B42318;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--tx);
+    font: 13px/1.5 "Segoe UI", "Malgun Gothic", sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  ::-webkit-scrollbar { width: 9px; }
+  ::-webkit-scrollbar-thumb { background: #2A3040; border-radius: 5px; }
+  button { font-family: inherit; cursor: pointer; }
+  input[type="text"] {
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 7px;
+    color: var(--tx); font-size: 12.5px; padding: 7px 10px; font-family: inherit;
+    outline: none;
+  }
+  input[type="text"]:focus { border-color: var(--mint); }
+
+  /* ---- 타이틀바 ---- */
+  #topbar {
+    height: 46px; flex: none; display: flex; align-items: center; gap: 10px;
+    padding: 0 150px 0 14px; border-bottom: 1px solid var(--line2);
+    -webkit-app-region: drag;
+  }
+  #topbar button, #topbar label, #topbar input { -webkit-app-region: no-drag; }
+  #topbar .mark { width: 18px; height: 18px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #63E0C8, #1E9E82); }
+  #topbar h1 { font-size: 14px; font-weight: 600; }
+  .btn {
+    background: none; border: 1px solid #2E3648; border-radius: 7px;
+    color: var(--tx2); font-size: 12px; padding: 5px 12px;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn:hover { border-color: #3D475E; color: var(--tx); background: #161B26; }
+  .btn.mint { color: var(--mint); border-color: #24443C; }
+  .btn.mint:hover { background: #12241F; border-color: var(--mint); }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+  #btnRec {
+    background: var(--mint); border: none; border-radius: 8px;
+    color: #04231C; font-size: 12px; font-weight: 700; padding: 7px 15px;
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  #btnRec:hover { filter: brightness(1.08); }
+  #btnRec .reddot { width: 8px; height: 8px; border-radius: 50%; background: var(--rec); }
+
+  /* ---- 레이아웃 ---- */
+  #wrap { flex: 1; display: flex; min-height: 0; }
+  #left { width: 250px; flex: none; border-right: 1px solid var(--line2);
+    display: flex; flex-direction: column; padding: 10px; }
+  #meetList { flex: 1; overflow-y: auto; margin-top: 9px; }
+  .group { font-size: 10.5px; color: var(--tx3); padding: 8px 8px 5px; }
+  .mcard {
+    border: 1px solid transparent; border-radius: 9px; padding: 9px 11px;
+    cursor: pointer; margin-bottom: 4px;
+  }
+  .mcard:hover { background: #161B26; }
+  .mcard.sel { background: #16241F; border-color: #24443C; }
+  .mcard .t { font-size: 12.5px; font-weight: 600; color: var(--tx);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mcard.dim .t { color: var(--tx2); font-weight: 500; }
+  .mcard .m { font-size: 10.5px; color: var(--tx3); margin-top: 2px; }
+  .st-ok { color: var(--ok); } .st-warn { color: var(--warn); } .st-bad { color: var(--bad); }
+
+  #main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  #noSel { flex: 1; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 14px; color: var(--tx3); }
+  #noSel .bigrec {
+    width: 74px; height: 74px; border-radius: 50%; background: #1A1F2B;
+    border: 2px solid #24443C; display: flex; align-items: center; justify-content: center;
+    font-size: 26px; cursor: pointer; transition: 0.15s;
+  }
+  #noSel .bigrec:hover { border-color: var(--mint); background: #12241F; }
+
+  /* ---- 상세 헤더 + 탭 ---- */
+  #detail { flex: 1; min-height: 0; display: none; flex-direction: column; }
+  #dHead { padding: 15px 18px 0; flex: none; }
+  #dTitle {
+    font-size: 17px; font-weight: 600; background: none; border: 1px solid transparent;
+    border-radius: 7px; color: var(--tx); padding: 2px 6px; margin-left: -6px;
+    width: 100%; max-width: 560px; font-family: inherit; outline: none;
+  }
+  #dTitle:hover { border-color: var(--line); }
+  #dTitle:focus { border-color: var(--mint); background: var(--panel2); }
+  #dMeta { display: flex; gap: 6px; margin-top: 7px; flex-wrap: wrap; align-items: center; }
+  .chip { font-size: 10.5px; border-radius: 5px; padding: 2px 8px;
+    display: inline-flex; align-items: center; gap: 4px; }
+  .chip.gray { color: var(--tx2); background: var(--panel2); }
+  .chip.mint { color: var(--mint); background: #122622; }
+  .chip.warn { color: var(--warn); background: #241F16; }
+  .chip.bad { color: var(--bad); background: #271518; }
+  #dActions { position: absolute; right: 18px; display: flex; gap: 7px; }
+  #dHeadRow { position: relative; padding-right: 260px; }
+  #tabs { display: flex; gap: 2px; margin-top: 13px; border-bottom: 1px solid var(--line2); }
+  .tab {
+    background: none; border: none; font-size: 12.5px; color: var(--tx3);
+    padding: 8px 14px; border-bottom: 2px solid transparent;
+  }
+  .tab:hover { color: var(--tx2); }
+  .tab.on { color: var(--mint); font-weight: 600; border-bottom-color: var(--mint); }
+  .tab .cnt { opacity: 0.6; font-weight: 400; margin-left: 3px; }
+  #dBody { flex: 1; overflow-y: auto; padding: 13px 18px; }
+  .page { display: none; }
+  .page.on { display: block; }
+
+  /* ---- 회의록 탭 ---- */
+  .sec { background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+  .sec .h { font-size: 11px; font-weight: 700; margin-bottom: 8px; letter-spacing: 0.3px; }
+  .sec .body { font-size: 12.5px; color: var(--tx2); white-space: pre-wrap; line-height: 1.75; }
+  .decision { display: flex; gap: 8px; padding: 3px 0; font-size: 12.5px; color: var(--tx); }
+  .decision .ck { color: var(--ok); flex: none; }
+  .todo { display: flex; align-items: center; gap: 9px; padding: 4px 0; }
+  .todo input[type="checkbox"] { accent-color: var(--mint); width: 14px; height: 14px; flex: none; cursor: pointer; }
+  .todo .tx { font-size: 12.5px; color: var(--tx); flex: 1; min-width: 0; }
+  .todo.done .tx { color: var(--tx3); text-decoration: line-through; }
+  .todo .who { font-size: 10px; color: var(--info); background: #141E2C; border-radius: 4px; padding: 1px 7px; flex: none; }
+  .todo .due { font-size: 10px; color: var(--warn); background: #241F16; border-radius: 4px; padding: 1px 7px; flex: none; }
+  #kwWrap { display: flex; flex-wrap: wrap; gap: 5px; }
+
+  /* ---- 전사 탭 ---- */
+  #player { width: 100%; height: 34px; margin-bottom: 10px; display: none; }
+  .tlrow { display: flex; gap: 9px; margin-bottom: 6px; }
+  .tlrow .ts {
+    font-size: 10.5px; color: var(--mint); font-family: Consolas, monospace;
+    background: #122622; border-radius: 4px; padding: 1px 6px; flex: none;
+    cursor: pointer; height: fit-content; margin-top: 2px;
+  }
+  .tlrow .ts:hover { outline: 1px solid var(--mint); }
+  .tlrow .tx { font-size: 12.5px; color: var(--tx2); }
+  .tlrow.hit .tx { color: var(--tx); }
+  mark { background: var(--mint); color: #04231C; border-radius: 3px; padding: 0 2px; }
+
+  /* ---- 질문 탭 ---- */
+  .qa { border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px;
+    margin-bottom: 9px; background: var(--panel); }
+  .qa .q { font-size: 12px; color: var(--tx2); margin-bottom: 6px; }
+  .qa .q b { color: var(--mint); margin-right: 6px; }
+  .qa .a { font-size: 12.5px; background: var(--panel2); border-radius: 8px;
+    padding: 8px 11px; white-space: pre-wrap; word-break: break-word; }
+
+  /* ---- 하단 녹음 독 ---- */
+  #dock {
+    flex: none; border-top: 1px solid var(--line2); background: #0E1117;
+    padding: 12px 18px;
+  }
+  #dockRow { display: flex; align-items: center; gap: 14px; justify-content: center; }
+  #recSysWrap { display: flex; align-items: center; gap: 5px; font-size: 11px;
+    color: var(--tx3); cursor: pointer; flex: none; }
+  #recBig {
+    width: 58px; height: 58px; border-radius: 50%; flex: none;
+    background: #1A1F2B; border: 2px solid #3A2126;
+    display: flex; align-items: center; justify-content: center; transition: 0.15s;
+  }
+  #recBig:hover { border-color: var(--rec); background: #241318; }
+  #recBig #recIcon { width: 22px; height: 22px; border-radius: 50%; background: var(--rec); display: block; transition: 0.15s; }
+  #dock.rec #recBig { border-color: var(--rec); background: #241318; }
+  #dock.rec #recBig #recIcon { border-radius: 4px; width: 18px; height: 18px; }
+  #recTime { font-family: Consolas, monospace; font-size: 16px; min-width: 66px; display: none; }
+  #wave { flex: 1; height: 34px; min-width: 0; max-width: 520px; display: none; }
+  #recTitle { width: 190px; flex: none; display: none; }
+  #dock.rec #recTime, #dock.rec #wave, #dock.rec #recTitle { display: block; }
+  #dock.rec #recSysWrap { display: none; }
+  /* ---- 메인 화면 실시간 전사(채팅 피드) ---- */
+  #liveView { display: none; flex: 1; min-height: 0; flex-direction: column; }
+  #liveViewHead {
+    flex: none; padding: 13px 18px 10px; font-size: 12.5px; font-weight: 600;
+    color: var(--tx); display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid var(--line2);
+  }
+  #liveViewHead .livedot { width: 9px; height: 9px; border-radius: 50%;
+    background: var(--rec); animation: blink 1.2s infinite; }
+  @keyframes blink { 50% { opacity: 0.25; } }
+  #liveViewHead #liveStat { font-size: 11px; color: var(--warn); font-weight: 400; }
+  #liveViewHead .sub { margin-left: auto; font-size: 10.5px; color: var(--tx3); font-weight: 400; }
+  #liveScroll { flex: 1; overflow-y: auto; padding: 18px; }
+  #liveDoc {
+    max-width: 780px; margin: 0 auto; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 12px;
+    padding: 26px 32px; min-height: 60%;
+  }
+  .lline { font-size: 13.5px; color: var(--tx); line-height: 1.95;
+    margin: 0 0 6px; word-break: break-word; }
+  .lline .lts { font-size: 10px; color: var(--mint); font-family: Consolas, monospace;
+    background: #122622; border-radius: 4px; padding: 1px 5px; margin-right: 8px;
+    vertical-align: 1px; }
+  .lline.pend { color: var(--tx3); font-style: italic; }
+  .lsys { text-align: center; font-size: 11.5px; color: var(--tx3);
+    background: var(--panel2); border: 1px solid var(--line2);
+    border-radius: 999px; padding: 4px 14px; width: fit-content; margin: 8px auto; }
+  .lsys.warn { color: var(--warn); }
+
+  .empty { color: var(--tx3); font-size: 12px; text-align: center; padding: 22px 6px; }
+  #toast {
+    position: fixed; left: 50%; bottom: 64px; transform: translateX(-50%);
+    background: #1D2430; border: 1px solid var(--line); color: var(--tx);
+    border-radius: 8px; padding: 8px 16px; font-size: 12px; display: none; z-index: 50;
+  }
+</style>
+</head>
+<body>
+  <div id="topbar">
+    <span class="mark"></span>
+    <h1>회의</h1>
+    <span style="margin-left:auto; display:flex; align-items:center; gap:9px; -webkit-app-region:no-drag;">
+      <button class="btn" id="btnAdd">파일 추가</button>
+    </span>
+  </div>
+
+  <div id="wrap">
+    <div id="left">
+      <input type="text" id="mSearch" placeholder="회의 검색" />
+      <div id="meetList"></div>
+    </div>
+
+    <div id="main">
+      <div id="noSel">
+        <div style="font-size:13px; color:var(--tx2);">아래 녹음 버튼으로 회의를 시작하거나, 왼쪽에서 회의를 선택하세요</div>
+        <div style="font-size:11px;">녹음이 끝나면 전사 → 회의록 → PDF까지 자동으로 이어집니다</div>
+      </div>
+
+      <!-- 녹음 중: 메인 화면 실시간 전사(문서 형식) -->
+      <div id="liveView">
+        <div id="liveViewHead">
+          <span class="livedot"></span>녹음 중 — 실시간 전사
+          <span id="liveStat"></span>
+          <span class="sub">말이 멈추는 순간 문장이 기록됩니다. 최종 전사는 저장 후 정교화됩니다</span>
+        </div>
+        <div id="liveScroll">
+          <div id="liveDoc">
+            <div class="lsys" id="liveBoot">듣는 중… 말하면 문장 단위로 이어서 기록됩니다</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="detail">
+        <div id="dHead">
+          <div id="dHeadRow">
+            <input type="text" id="dTitle" spellcheck="false" title="클릭해서 제목 수정" />
+            <span id="dActions">
+              <button class="btn mint" id="btnExport">PDF 내보내기</button>
+              <button class="btn" id="btnRegen" title="전사는 재사용, 회의록만 다시 생성">↻ 재생성</button>
+            </span>
+          </div>
+          <div id="dMeta"></div>
+          <div id="tabs">
+            <button class="tab on" data-tab="minutes">회의록</button>
+            <button class="tab" data-tab="script">전사 <span class="cnt" id="tlCnt"></span></button>
+            <button class="tab" data-tab="qa">질문</button>
+          </div>
+        </div>
+        <div id="dBody">
+          <div class="page on" id="pg-minutes">
+            <div class="sec" id="secProg" style="display:none; border-color:#3A3320;">
+              <div class="h" style="color:var(--warn);">처리 중</div>
+              <div class="body" id="progStep">-</div>
+            </div>
+            <div class="sec" id="secDecide" style="display:none;">
+              <div class="h" style="color:var(--ok);">결정사항</div>
+              <div id="decideList"></div>
+            </div>
+            <div class="sec" id="secTodo" style="display:none;">
+              <div class="h" style="color:var(--warn);">액션아이템</div>
+              <div id="todoList"></div>
+            </div>
+            <div class="sec" id="secAgenda" style="display:none;">
+              <div class="h" style="color:var(--tx2);">주요 안건</div>
+              <div class="body" id="agendaBody"></div>
+            </div>
+            <div class="sec" id="secOpen" style="display:none;">
+              <div class="h" style="color:var(--info);">미결 이슈</div>
+              <div class="body" id="openBody"></div>
+            </div>
+            <div class="sec" id="secRaw" style="display:none;">
+              <div class="h" style="color:var(--tx2);">회의 요약</div>
+              <div class="body" id="rawBody"></div>
+            </div>
+            <div class="sec">
+              <div class="h" style="color:var(--tx3);">참석자 · 키워드</div>
+              <input type="text" id="dAttendees" placeholder="참석자 입력 (쉼표 구분 — PDF에 실립니다)" style="width:100%; margin-bottom:9px;" />
+              <div id="kwWrap"></div>
+            </div>
+          </div>
+
+          <div class="page" id="pg-script">
+            <audio id="player" controls></audio>
+            <input type="text" id="tlSearch" placeholder="전사 검색" style="width:100%; margin-bottom:10px;" />
+            <div id="timeline"><div class="empty">전사가 아직 없습니다</div></div>
+          </div>
+
+          <div class="page" id="pg-qa">
+            <div style="display:flex; gap:8px; margin-bottom:11px;">
+              <input type="text" id="qaInput" placeholder="이 회의에 대해 물어보세요 — 예: 결정된 것만 정리해줘" style="flex:1;" />
+              <button class="btn mint" id="qaSend" style="flex:none;">질문</button>
+            </div>
+            <div id="qaList"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="dock">
+    <div id="dockRow">
+      <label id="recSysWrap">
+        <input type="checkbox" id="recSys" checked style="accent-color:var(--mint);" />시스템 소리
+      </label>
+      <button id="recBig" title="회의 녹음 시작/정지"><i id="recIcon"></i></button>
+      <span id="recTime">00:00</span>
+      <canvas id="wave"></canvas>
+      <input type="text" id="recTitle" placeholder="회의 제목" />
+    </div>
+  </div>
+  <div id="toast"></div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const AUDIO = [".mp3", ".wav", ".m4a", ".ogg", ".flac", ".webm", ".aac", ".wma"];
+  const STAGE_LABEL = { 1: "음성 전사 중 (Whisper)", 2: "임베딩 중", 3: "회의록 작성 중 (Gemma)" };
+
+  let meetings = [];
+  let sel = null;
+  let tlLines = [];
+  let toastTimer = null;
+
+  function toast(m) {
+    const t = $("toast");
+    t.textContent = m; t.style.display = "block";
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => (t.style.display = "none"), 2400);
+  }
+
+  /* ---- 회의별 메타(제목·참석자·체크 상태) — 로컬 저장 ---- */
+  const meta = {
+    get(p) { try { return JSON.parse(localStorage.getItem("meta:" + p)) || {}; } catch (e) { return {}; } },
+    set(p, patch) {
+      const cur = meta.get(p);
+      localStorage.setItem("meta:" + p, JSON.stringify({ ...cur, ...patch }));
+    },
+  };
+  const titleOf = (m) => (meta.get(m.path).title || m.filename.replace(/\.[^.]+$/, ""));
+
+  /* ================= 목록 ================= */
+  const healTried = new Set(); // 미등록 녹음 자동 재등록(세션당 1회)
+  async function refresh() {
+    const list = await window.leva.cacheList().catch(() => null);
+    if (Array.isArray(list))
+      meetings = list.filter((e) => AUDIO.includes((e.ext || "").toLowerCase()));
+    // 폴백: 녹음 폴더의 파일 중 캐시 목록에 없는 것 = 등록 누락(워커 다운 등)
+    // → 목록에 '대기'로 표시하고 자동으로 다시 분석 큐에 넣는다.
+    try {
+      const recs = await window.leva.listRecordings();
+      const known = new Set(meetings.map((m) => m.path));
+      for (const r of recs || []) {
+        if (known.has(r.path)) continue;
+        meetings.push({
+          path: r.path, filename: r.filename, ext: r.ext,
+          status: "PENDING", stage: 0, keywords: [], summary: "",
+          chunks: 0, cached_at: new Date(r.mtimeMs).toISOString(),
+          unregistered: true,
+        });
+        if (!healTried.has(r.path)) {
+          healTried.add(r.path);
+          window.leva.cacheFile(r.path).catch(() => {});
+        }
+      }
+      meetings.sort((a, b) => String(b.cached_at || "").localeCompare(String(a.cached_at || "")));
+    } catch (e) {}
+    renderList();
+    if (sel) {
+      const m = meetings.find((x) => x.path === sel);
+      if (m) fillDetail(m, { keepTab: true });
+    }
+  }
+
+  function groupOf(ts) {
+    if (!ts) return "이전";
+    const d = new Date(ts);
+    const now = new Date();
+    const day0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (d >= day0) return "오늘";
+    const week0 = new Date(day0.getTime() - day0.getDay() * 86400000);
+    if (d >= week0) return "이번 주";
+    return "이전";
+  }
+  function stateChip(m) {
+    if (m.status === "CACHED") return '<span class="st-ok">완료</span>';
+    if (m.status === "FAILED") return '<span class="st-bad">실패</span>';
+    return '<span class="st-warn">' + esc(STAGE_LABEL[m.stage] || "대기") + "</span>";
+  }
+  function renderList() {
+    const q = $("mSearch").value.trim().toLowerCase();
+    const items = meetings.filter((m) =>
+      !q || (titleOf(m) + " " + m.filename + " " + (m.keywords || []).join(" ")).toLowerCase().includes(q));
+    if (!items.length) {
+      $("meetList").innerHTML = '<div class="empty">회의가 없습니다<br/>상단에서 녹음을 시작해 보세요</div>';
+      return;
+    }
+    const groups = {};
+    for (const m of items) (groups[groupOf(m.cached_at)] ||= []).push(m);
+    $("meetList").innerHTML = ["오늘", "이번 주", "이전"].filter((g) => groups[g]).map((g) =>
+      '<div class="group">' + g + "</div>" +
+      groups[g].map((m) => {
+        const d = m.cached_at
+          ? new Date(m.cached_at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })
+          : "";
+        return '<div class="mcard' + (m.path === sel ? " sel" : "") + (m.status !== "CACHED" ? " dim" : "") +
+          '" data-path="' + esc(m.path) + '">' +
+          '<div class="t">' + esc(titleOf(m)) + "</div>" +
+          '<div class="m">' + d + " · " + stateChip(m) + "</div></div>";
+      }).join("")).join("");
+    $("meetList").querySelectorAll(".mcard").forEach((c) =>
+      c.addEventListener("click", () => select(c.dataset.path)));
+  }
+  $("mSearch").addEventListener("input", renderList);
+
+  function select(path) {
+    sel = path;
+    renderList();
+    const m = meetings.find((x) => x.path === path);
+    if (!m) return;
+    $("liveView").style.display = "none"; // 녹음 중 열람 — 타이머 클릭으로 복귀
+    fillDetail(m, {});
+    loadTranscript(m);
+  }
+
+  /* ================= 상세 ================= */
+  let curTab = "minutes";
+  function setTab(t) {
+    curTab = t;
+    document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("on", b.dataset.tab === t));
+    document.querySelectorAll("#dBody .page").forEach((p) => p.classList.toggle("on", p.id === "pg-" + t));
+  }
+  document.querySelectorAll(".tab").forEach((b) =>
+    b.addEventListener("click", () => setTab(b.dataset.tab)));
+
+  function fmtDur(sec) {
+    if (!sec) return "";
+    const m = Math.round(sec / 60);
+    return m >= 60 ? Math.floor(m / 60) + "시간 " + (m % 60) + "분" : m + "분";
+  }
+  function durationFromTl() {
+    const last = tlLines[tlLines.length - 1];
+    if (!last || !last.ts) return 0;
+    const p = last.ts.split(":").map(Number);
+    while (p.length < 3) p.unshift(0);
+    return p[0] * 3600 + p[1] * 60 + p[2];
+  }
+
+  function fillDetail(m, { keepTab } = {}) {
+    $("noSel").style.display = "none";
+    // 라이브 뷰가 떠 있으면(녹음 중) 화면 전환 없이 데이터만 갱신
+    if ($("liveView").style.display === "none" || !rec) $("detail").style.display = "flex";
+    if (!keepTab) setTab("minutes");
+    $("dTitle").value = titleOf(m);
+    $("dAttendees").value = meta.get(m.path).attendees || "";
+    const chips = [];
+    if (m.cached_at)
+      chips.push('<span class="chip gray">' + new Date(m.cached_at).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" }) + "</span>");
+    const dur = durationFromTl();
+    if (dur) chips.push('<span class="chip gray">' + fmtDur(dur) + "</span>");
+    chips.push('<span class="chip gray" title="' + esc(m.path) + '">' + esc(m.filename) + "</span>");
+    if (m.status === "CACHED") chips.push('<span class="chip mint">회의록 완료</span>');
+    else if (m.status === "FAILED")
+      chips.push('<span class="chip bad" title="' + esc(m.error_msg || "") + '">실패 · ' + esc((m.error_msg || "").slice(0, 40)) + "</span>");
+    else chips.push('<span class="chip warn">' + esc(STAGE_LABEL[m.stage] || "대기 중") + "</span>");
+    $("dMeta").innerHTML = chips.join("");
+
+    renderMinutes(m);
+
+    $("btnRegen").onclick = () => {
+      window.leva.cacheRetry(m.path).catch(() => {});
+      toast("회의록을 다시 생성합니다 (전사는 재사용)");
+      setTimeout(refresh, 1200);
+    };
+  }
+  $("dTitle").addEventListener("change", () => {
+    if (!sel) return;
+    meta.set(sel, { title: $("dTitle").value.trim() });
+    renderList();
+  });
+  $("dAttendees").addEventListener("change", () => {
+    if (sel) meta.set(sel, { attendees: $("dAttendees").value.trim() });
+  });
+
+  /* ---- 회의록 구조화 렌더 ---- */
+  function splitSummary(s) {
+    s = String(s || "").trim();
+    const marks = [["①", "agenda"], ["②", "decide"], ["③", "todo"], ["④", "open"]];
+    const idx = marks.map(([m, k]) => ({ k, i: s.indexOf(m) })).filter((x) => x.i >= 0).sort((a, b) => a.i - b.i);
+    if (!idx.length) return { raw: s };
+    const out = {};
+    if (idx[0].i > 0) out.raw = s.slice(0, idx[0].i).trim();
+    for (let k = 0; k < idx.length; k++) {
+      const end = k + 1 < idx.length ? idx[k + 1].i : s.length;
+      out[idx[k].k] = s.slice(idx[k].i + 1, end).replace(/^[\s:.\-]*(주요\s*안건|결정\s*사항|액션\s*아이템|미결\s*이슈)?[\s:.\-]*/, "").trim();
+    }
+    return out;
+  }
+  function splitItems(body) {
+    return String(body || "").split(/\n+|(?:^|\s)[-·•▪]\s+/)
+      .map((x) => x.replace(/^[\s,;]+|[\s,;]+$/g, "")).filter((x) => x.length > 1);
+  }
+  function parseAction(item) {
+    let owner = null, due = null, text = item;
+    const om = text.match(/^([가-힣A-Za-z]{2,10}(?:님|씨|대리|과장|차장|팀장|부장|매니저|PM)?)\s*[:：]\s*/);
+    if (om) { owner = om[1]; text = text.slice(om[0].length); }
+    const dm = text.match(/(오늘|내일|모레|이번\s*주|다음\s*주|(?:\d+월\s*)?\d+일까지|\d+일|[월화수목금토일]요일(?:까지)?)/);
+    if (dm) due = dm[0];
+    return { owner, due, text: text.trim() };
+  }
+
+  function renderMinutes(m) {
+    const done = m.status === "CACHED";
+    $("secProg").style.display = done || m.status === "FAILED" ? "none" : "block";
+    $("progStep").textContent = STAGE_LABEL[m.stage] || "대기 중 — 완료되면 회의록이 표시됩니다";
+    const s = splitSummary(m.summary || "");
+    const show = (id, on) => ($(id).style.display = on ? "block" : "none");
+
+    show("secDecide", !!s.decide);
+    if (s.decide)
+      $("decideList").innerHTML = splitItems(s.decide).map((x) =>
+        '<div class="decision"><span class="ck">✓</span><span>' + esc(x) + "</span></div>").join("");
+
+    show("secTodo", !!s.todo);
+    if (s.todo) {
+      const checked = meta.get(m.path).todo || [];
+      const items = splitItems(s.todo).map(parseAction);
+      $("todoList").innerHTML = items.map((it, i) =>
+        '<div class="todo' + (checked.includes(i) ? " done" : "") + '" data-i="' + i + '">' +
+        '<input type="checkbox"' + (checked.includes(i) ? " checked" : "") + " />" +
+        '<span class="tx">' + esc(it.text) + "</span>" +
+        (it.owner ? '<span class="who">' + esc(it.owner) + "</span>" : "") +
+        (it.due ? '<span class="due">' + esc(it.due) + "</span>" : "") +
+        "</div>").join("");
+      $("todoList").querySelectorAll(".todo input").forEach((cb) =>
+        cb.addEventListener("change", () => {
+          const arr = [];
+          $("todoList").querySelectorAll(".todo").forEach((row) => {
+            row.classList.toggle("done", row.querySelector("input").checked);
+            if (row.querySelector("input").checked) arr.push(Number(row.dataset.i));
+          });
+          meta.set(m.path, { todo: arr });
+        }));
+    }
+
+    show("secAgenda", !!s.agenda);
+    if (s.agenda) $("agendaBody").textContent = s.agenda;
+    show("secOpen", !!s.open);
+    if (s.open) $("openBody").textContent = s.open;
+    show("secRaw", !!s.raw && !s.decide && !s.todo);
+    if (s.raw) $("rawBody").textContent = s.raw;
+    if (!done && !m.summary) show("secRaw", false);
+
+    $("kwWrap").innerHTML = (m.keywords || []).map((k) =>
+      '<span class="chip mint">' + esc(k) + "</span>").join("") ||
+      '<span style="color:var(--tx3); font-size:11.5px;">키워드는 회의록 생성 후 표시됩니다</span>';
+  }
+
+  /* ================= 전사 + 오디오 재생 ================= */
+  function tsToSec(ts) {
+    const p = String(ts || "").split(":").map(Number);
+    while (p.length < 3) p.unshift(0);
+    return (p[0] * 3600 + p[1] * 60 + p[2]) || 0;
+  }
+  async function loadTranscript(m) {
+    tlLines = [];
+    $("timeline").innerHTML = '<div class="empty">전사 불러오는 중…</div>';
+    $("player").style.display = "none";
+    try {
+      const info = await window.leva.fileInfo(m.path);
+      if (info && info.fileUrl) {
+        $("player").src = info.fileUrl;
+        $("player").style.display = "block";
+      }
+    } catch (e) {}
+    const r = await window.leva.extractText(m.path).catch(() => null);
+    const body = (r && r.ok && r.text) || "";
+    if (!body.trim()) {
+      $("timeline").innerHTML = '<div class="empty">전사가 아직 없습니다 (전사 완료 후 표시)</div>';
+      $("tlCnt").textContent = "";
+      return;
+    }
+    tlLines = body.split("\n").map((line) => {
+      const mm = line.match(/^\[([\d:]+)\]\s*(.*)$/);
+      return mm ? { ts: mm[1], text: mm[2] } : { ts: "", text: line };
+    }).filter((x) => x.text.trim());
+    renderTimeline();
+    const cur = meetings.find((x) => x.path === sel);
+    if (cur) fillDetail(cur, { keepTab: true }); // 길이 칩 갱신
+  }
+  function renderTimeline() {
+    const q = $("tlSearch").value.trim();
+    let shown = 0;
+    $("timeline").innerHTML = tlLines.map((l) => {
+      const hit = q && l.text.includes(q);
+      if (q && !hit) return "";
+      shown++;
+      let tx = esc(l.text);
+      if (hit) tx = tx.split(esc(q)).join("<mark>" + esc(q) + "</mark>");
+      return '<div class="tlrow' + (hit ? " hit" : "") + '">' +
+        (l.ts ? '<span class="ts" data-ts="' + esc(l.ts) + '" title="여기부터 재생">' + esc(l.ts) + "</span>" : "") +
+        '<span class="tx">' + tx + "</span></div>";
+    }).join("") || '<div class="empty">검색 결과 없음</div>';
+    $("tlCnt").textContent = q ? shown + "/" + tlLines.length : (tlLines.length || "");
+    $("timeline").querySelectorAll(".ts").forEach((t) =>
+      t.addEventListener("click", () => {
+        const pl = $("player");
+        if (pl.style.display === "none") { toast("오디오를 불러올 수 없습니다"); return; }
+        pl.currentTime = tsToSec(t.dataset.ts);
+        pl.play().catch(() => {});
+      }));
+  }
+  $("tlSearch").addEventListener("input", renderTimeline);
+
+  /* ================= 질문 탭 ================= */
+  let qaPending = null;
+  async function sendQa() {
+    const q = $("qaInput").value.trim();
+    const m = meetings.find((x) => x.path === sel);
+    if (!q || qaPending || !m) return;
+    $("qaInput").value = "";
+    $("qaSend").disabled = true;
+    const div = document.createElement("div");
+    div.className = "qa";
+    div.innerHTML = '<div class="q"><b>Q</b>' + esc(q) + '</div><div class="a">생각 중…</div>';
+    $("qaList").prepend(div);
+    qaPending = div.querySelector(".a");
+    try {
+      const a = await window.leva.ask("'" + m.filename + "' 회의 내용 기준으로: " + q);
+      qaPending.textContent = a || qaPending.textContent;
+    } catch (e) {
+      qaPending.textContent = "오류: " + e.message;
+    }
+    qaPending = null;
+    $("qaSend").disabled = false;
+    $("qaInput").focus();
+  }
+  window.leva.onChatChunk((p) => {
+    if (!qaPending || !p || !p.delta) return;
+    if (qaPending.textContent === "생각 중…") qaPending.textContent = "";
+    qaPending.textContent += p.delta;
+  });
+  $("qaSend").addEventListener("click", sendQa);
+  $("qaInput").addEventListener("keydown", (e) => { if (e.key === "Enter") sendQa(); });
+
+  /* ================= 녹음 (16kHz mono WAV + 라이브 파형) ================= */
+  let rec = null;
+
+  function makeResampler(fromRate, toRate) {
+    const ratio = fromRate / toRate;
+    let pos = 0;
+    let last = 0;
+    return (input) => {
+      const out = [];
+      while (pos < input.length) {
+        const i = Math.floor(pos);
+        const frac = pos - i;
+        const a = i < input.length ? input[i] : last;
+        const b = i + 1 < input.length ? input[i + 1] : a;
+        out.push(a + (b - a) * frac);
+        pos += ratio;
+      }
+      pos -= input.length;
+      last = input[input.length - 1] || 0;
+      const i16 = new Int16Array(out.length);
+      for (let k = 0; k < out.length; k++) {
+        const v = Math.max(-1, Math.min(1, out[k]));
+        i16[k] = v < 0 ? v * 0x8000 : v * 0x7FFF;
+      }
+      return i16;
+    };
+  }
+  function encodeWav(chunks, sampleRate) {
+    let n = 0;
+    for (const c of chunks) n += c.length;
+    const buf = new ArrayBuffer(44 + n * 2);
+    const dv = new DataView(buf);
+    const wstr = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+    wstr(0, "RIFF"); dv.setUint32(4, 36 + n * 2, true); wstr(8, "WAVE");
+    wstr(12, "fmt "); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true);
+    dv.setUint16(22, 1, true); dv.setUint32(24, sampleRate, true);
+    dv.setUint32(28, sampleRate * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+    wstr(36, "data"); dv.setUint32(40, n * 2, true);
+    let off = 44;
+    for (const c of chunks)
+      for (let i = 0; i < c.length; i++) { dv.setInt16(off, c[i], true); off += 2; }
+    return buf;
+  }
+
+  function drawWave(analyser) {
+    const cv = $("wave");
+    const g = cv.getContext("2d");
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    const bars = [];
+    const loop = () => {
+      if (!rec) return;
+      analyser.getByteTimeDomainData(data);
+      let peak = 0;
+      for (let i = 0; i < data.length; i++) peak = Math.max(peak, Math.abs(data[i] - 128) / 128);
+      bars.push(peak);
+      const maxBars = Math.floor(cv.width / 5);
+      if (bars.length > maxBars) bars.splice(0, bars.length - maxBars);
+      g.clearRect(0, 0, cv.width, cv.height);
+      g.fillStyle = "#45D6B8";
+      bars.forEach((p, i) => {
+        const h = Math.max(2, p * cv.height);
+        g.fillRect(i * 5, (cv.height - h) / 2, 3, h);
+      });
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  }
+
+  async function startRec() {
+    if (rec) return;
+    const streams = [];
+    try {
+      streams.push(await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true },
+      }));
+    } catch (e) { toast("마이크 권한을 얻지 못했습니다"); return; }
+    if ($("recSys").checked) {
+      try {
+        const sys = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true });
+        sys.getVideoTracks().forEach((t) => t.stop());
+        if (sys.getAudioTracks().length) streams.push(sys);
+      } catch (e) { toast("시스템 소리 캡처 실패 — 마이크만 녹음합니다"); }
+    }
+    const ctx = new AudioContext();
+    const mix = ctx.createGain();
+    for (const s of streams)
+      if (s.getAudioTracks().length) ctx.createMediaStreamSource(s).connect(mix);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    mix.connect(analyser);
+    const proc = ctx.createScriptProcessor(4096, 1, 1);
+    const mute = ctx.createGain(); mute.gain.value = 0;
+    mix.connect(proc); proc.connect(mute); mute.connect(ctx.destination);
+    const resample = makeResampler(ctx.sampleRate, 16000);
+    const chunks = [];
+    const rmsArr = []; // 조각별 음량(RMS) — 무음 감지(VAD)용
+    proc.onaudioprocess = (ev) => {
+      const i16 = resample(ev.inputBuffer.getChannelData(0));
+      chunks.push(i16);
+      let sum = 0;
+      for (let i = 0; i < i16.length; i += 4) { // 1/4 샘플링으로 충분
+        const v = i16[i] / 32768;
+        sum += v * v;
+      }
+      rmsArr.push(Math.sqrt(sum / Math.max(1, i16.length / 4)));
+    };
+    rec = { ctx, streams, proc, chunks, rms: rmsArr, floor: 0.006,
+            t0: Date.now(), timer: null,
+            liveIdx: 0, liveSamples: 0, liveBusy: false, liveDead: false, liveTimer: null };
+    $("dock").classList.add("rec");
+    const cv = $("wave");
+    cv.width = cv.clientWidth || 500;
+    cv.height = 34;
+    // 메인 화면을 실시간 전사 문서로 전환
+    $("liveDoc").innerHTML = '<div class="lsys" id="liveBoot">듣는 중… 말하면 문장 단위로 이어서 기록됩니다</div>';
+    showLiveView(true);
+    $("recTitle").value = "";
+    $("recTitle").focus();
+    rec.timer = setInterval(() => {
+      const s = Math.floor((Date.now() - rec.t0) / 1000);
+      $("recTime").textContent =
+        String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+    }, 500);
+    drawWave(analyser);
+    // 캐싱(밀린 전사 포함)을 일시정지해 STT 자원을 실시간에 양보한다.
+    window.leva.cachePause().catch(() => {});
+    // 1순위: 스트리밍 자막(faster-whisper) → 실패 시 문장 단위(VAD) 폴백
+    liveStat("라이브 자막 엔진 준비 중… (첫 실행은 모델 다운로드로 오래 걸릴 수 있어요)");
+    const startFallback = () => {
+      if (!rec || rec.streamMode) return;
+      rec.liveTimer = setTimeout(liveLoop, 500);
+    };
+    if (typeof window.leva.liveStart === "function") {
+      window.leva.liveStart().then((r) => {
+        if (!rec) return;
+        if (r && r.ok) {
+          rec.streamMode = true;
+          liveStat("");
+          liveSys("스트리밍 자막 모드 (" + (r.device === "cuda" ? "GPU" : "CPU") + ")");
+          rec.sendTimer = setInterval(sendLiveAudio, 500);
+        } else {
+          liveStat("");
+          liveSys("스트리밍 자막 사용 불가 — 문장 단위 방식으로 동작합니다" +
+            ((r && r.error) ? " (" + r.error + ")" : ""), true);
+          startFallback();
+        }
+      }).catch(() => { if (rec) { liveStat(""); startFallback(); } });
+    } else {
+      liveStat("");
+      startFallback(); // 구버전 메인 프로세스 — 재시작 전까지 VAD 방식
+    }
+  }
+
+  /* ---- 스트리밍 자막: 오디오 전송 + 부분/확정 렌더 ---- */
+  let livePend = null; // 타이핑 중(부분) 줄
+  function sendLiveAudio() {
+    if (!rec || !rec.streamMode) return;
+    const from = rec.sentIdx || 0;
+    if (rec.chunks.length <= from) return;
+    const parts = rec.chunks.slice(from);
+    rec.sentIdx = rec.chunks.length;
+    let n = 0;
+    parts.forEach((c) => (n += c.length));
+    const all = new Int16Array(n);
+    let o = 0;
+    parts.forEach((c) => { all.set(c, o); o += c.length; });
+    window.leva.liveAudio(all.buffer);
+  }
+  if (window.leva.onLiveText) window.leva.onLiveText((m) => {
+    if (!rec || !rec.streamMode || !m) return;
+    if (m.final != null) {
+      if (livePend) { livePend.remove(); livePend = null; }
+      if (m.final) liveLine(fmtSec(m.start || 0), m.final);
+    } else if (m.partial != null) {
+      if (!m.partial) {
+        if (livePend) { livePend.remove(); livePend = null; }
+        return;
+      }
+      if (!livePend) {
+        livePend = liveLine("…", m.partial, true);
+      } else {
+        livePend.querySelector(".ltx").textContent = m.partial;
+        $("liveScroll").scrollTop = $("liveScroll").scrollHeight;
+      }
+    }
+  });
+
+  /* ---- 실시간 전사 미리보기: 6초 이상 쌓이면 조각을 전사해 붙인다 ---- */
+  function fmtSec(sec) {
+    sec = Math.floor(sec);
+    return String(Math.floor(sec / 60)).padStart(2, "0") + ":" + String(sec % 60).padStart(2, "0");
+  }
+  /* 라이브 뷰(메인 채팅 피드) 표시/복원 */
+  function showLiveView(on) {
+    $("liveView").style.display = on ? "flex" : "none";
+    if (on) {
+      $("noSel").style.display = "none";
+      $("detail").style.display = "none";
+    } else if (sel && meetings.find((x) => x.path === sel)) {
+      $("detail").style.display = "flex";
+    } else {
+      $("noSel").style.display = "flex";
+    }
+  }
+  function liveLine(ts, text, pending) {
+    const boot = $("liveBoot");
+    if (boot) boot.remove();
+    const p = document.createElement("p");
+    p.className = "lline" + (pending ? " pend" : "");
+    p.innerHTML = '<span class="lts">' + esc(ts) + "</span><span class=\"ltx\">" + esc(text) + "</span>";
+    $("liveDoc").appendChild(p);
+    $("liveScroll").scrollTop = $("liveScroll").scrollHeight;
+    return p;
+  }
+  function liveSys(text, warn) {
+    const div = document.createElement("div");
+    div.className = "lsys" + (warn ? " warn" : "");
+    div.textContent = text;
+    $("liveDoc").appendChild(div);
+    $("liveScroll").scrollTop = $("liveScroll").scrollHeight;
+  }
+  function liveStat(msg) { $("liveStat").textContent = msg || ""; }
+  function liveDie(msg) {
+    if (!rec) return;
+    rec.liveDead = true;
+    liveStat("");
+    liveSys("실시간 전사를 쓸 수 없습니다: " + msg +
+      " — 녹음은 계속되고, 저장하면 전체가 전사됩니다", true);
+  }
+  // 치명 오류(설치/재시작 필요)만 중단하고, 지연·타임아웃은 재시도한다
+  const LIVE_FATAL = /미설치|설치되지|재시작|설정|unknown type|기동 실패/;
+  function liveError(msg) {
+    if (!rec) return;
+    if (LIVE_FATAL.test(msg)) { liveDie(msg); return; }
+    rec.liveRetries = (rec.liveRetries || 0) + 1;
+    if (rec.liveRetries > 8) { liveDie(msg + " (반복 실패)"); return; }
+    liveStat("전사 지연 — 대기열이 밀려 재시도 중 (" + rec.liveRetries + ")");
+  }
+  function liveLoop() {
+    if (!rec || rec.liveDead) return;
+    if (typeof window.leva.liveTranscribe !== "function") {
+      liveDie("앱을 완전히 종료 후 다시 시작해야 활성화됩니다");
+      return;
+    }
+    if (!rec.liveGot) {
+      const waited = Math.floor((Date.now() - rec.t0) / 1000);
+      liveStat(rec.liveSent
+        ? "음성 인식 서버 기동/대기 중… " + waited + "초"
+        : "듣는 중… (말이 멈추면 문장이 기록됩니다)");
+    }
+    if (!rec.liveBusy) {
+      // VAD: 말이 멈춘 순간(0.55초 무음) 자르고, 계속 이어지면 7초에서 강제 컷.
+      const from = rec.liveIdx;
+      const chunks = rec.chunks;
+      const rms = rec.rms;
+      let samples = 0;
+      let maxR = 0;
+      for (let i = from; i < chunks.length; i++) {
+        samples += chunks[i].length;
+        if (rms[i] > maxR) maxR = rms[i];
+        if (rms[i] < rec.floor) // 잡음 바닥 추적(느리게 상승, 빠르게 하강)
+          rec.floor = rec.floor * 0.7 + rms[i] * 0.3;
+      }
+      rec.floor = Math.min(0.05, Math.max(0.002, rec.floor * 1.01));
+      const thr = Math.max(0.012, rec.floor * 2.5);
+      const dur = samples / 16000;
+      let silence = 0; // 말꼬리 무음 길이(초)
+      for (let i = chunks.length - 1; i >= from; i--) {
+        if (rms[i] < thr) silence += chunks[i].length / 16000;
+        else break;
+      }
+      const spoke = maxR >= thr;
+      const cut = (spoke && dur >= 1.2 && silence >= 0.55) || dur >= 7
+        || (!spoke && dur >= 4); // 무음만 4초 — 소비만 하고 전송 생략
+      if (cut && chunks.length > from) {
+        const part = chunks.slice(from);
+        rec.liveIdx = chunks.length;
+        const startSec = rec.liveSamples / 16000;
+        rec.liveSamples += samples;
+        if (spoke) {
+          rec.liveBusy = true;
+          rec.liveSent = true;
+          const pend = liveLine(fmtSec(startSec), "…", true); // 인식 중 임시 줄
+          const wav = encodeWav(part, 16000);
+          window.leva.liveTranscribe(wav).then((r) => {
+            if (!rec) { pend.remove(); return; }
+            rec.liveBusy = false;
+            if (r && r.ok) {
+              rec.liveGot = true;
+              rec.liveRetries = 0;
+              liveStat("");
+              if (r.text) {
+                pend.classList.remove("pend");
+                pend.querySelector(".ltx").textContent = r.text;
+              } else {
+                pend.remove();
+              }
+            } else {
+              pend.remove();
+              liveError((r && r.error) || "알 수 없음");
+            }
+          }).catch((e) => {
+            pend.remove();
+            if (rec) { rec.liveBusy = false; liveError(String((e && e.message) || e)); }
+          });
+        }
+      }
+    }
+    if (rec && !rec.liveDead) rec.liveTimer = setTimeout(liveLoop, 300);
+  }
+
+  async function stopRec() {
+    if (!rec) return;
+    const { ctx, streams, proc, chunks, timer } = rec;
+    clearTimeout(rec.liveTimer);
+    clearInterval(rec.sendTimer);
+    if (rec.streamMode) {
+      sendLiveAudio(); // 남은 조각 마저 전송
+      window.leva.liveStop().catch(() => {});
+    }
+    if (livePend) { livePend.remove(); livePend = null; }
+    rec = null;
+    clearInterval(timer);
+    try { proc.disconnect(); } catch (e) {}
+    try { await ctx.close(); } catch (e) {}
+    streams.forEach((s) => s.getTracks().forEach((t) => t.stop()));
+    $("dock").classList.remove("rec");
+    $("recTime").textContent = "00:00";
+    showLiveView(false);
+    window.leva.cacheResume().catch(() => {}); // 양보했던 캐싱 재개
+    const total = chunks.reduce((a, c) => a + c.length, 0);
+    if (total < 16000) { toast("1초 미만 녹음은 저장하지 않습니다"); return; }
+    const title = ($("recTitle").value || "").trim() || "회의";
+    const wav = encodeWav(chunks, 16000);
+    const r = await window.leva.saveRecording(wav, title)
+      .catch((e) => ({ ok: false, error: String(e) }));
+    if (r && r.ok) {
+      meta.set(r.path, { title });
+      if (!r.queued && !r.registered) {
+        toast("저장됨 — 단, 분석 워커가 꺼져 있어 전사가 대기 중입니다 (앱 재시작 시 자동 처리)");
+      } else {
+        toast("저장 완료 — 전사를 시작합니다");
+      }
+      setTimeout(async () => { await refresh(); select(r.path); }, 800);
+    } else {
+      toast("저장 실패: " + ((r && r.error) || "알 수 없음"));
+    }
+  }
+  $("recBig").addEventListener("click", () => (rec ? stopRec() : startRec()));
+  // 녹음 중 다른 회의를 보다가 타이머/파형 클릭 → 라이브 피드로 복귀
+  $("recTime").addEventListener("click", () => { if (rec) showLiveView(true); });
+  $("wave").addEventListener("click", () => { if (rec) showLiveView(true); });
+  window.addEventListener("beforeunload", () => { if (rec) stopRec(); });
+
+  /* ================= PDF 내보내기 ================= */
+  function buildReportHtml(m, opts) {
+    const s = splitSummary(m.summary || "");
+    const kw = (m.keywords || []).join(" · ");
+    const li = (body) => splitItems(body).map((x) => "<li>" + esc(x) + "</li>").join("");
+    const rows = tlLines.map((l) =>
+      "<tr><td class=\"t\">" + esc(l.ts) + "</td><td>" + esc(l.text) + "</td></tr>").join("");
+    return "<!DOCTYPE html><html lang=\"ko\"><head><meta charset=\"utf-8\"><style>" +
+      "body{font-family:'Malgun Gothic','Segoe UI',sans-serif;color:#1A1D26;margin:0;padding:34px 40px;font-size:12.5px;line-height:1.7}" +
+      "h1{font-size:22px;margin:0 0 4px}.meta{color:#666F80;font-size:11.5px}" +
+      ".bar{height:3px;background:#1DBFA0;margin:14px 0 20px}" +
+      "h2{font-size:14px;color:#0D8F77;margin:20px 0 7px;border-bottom:1px solid #E2E6EE;padding-bottom:4px}" +
+      "ul{margin:2px 0 2px 18px}li{margin:3px 0}.sec{white-space:pre-wrap}.kw{color:#556070;font-size:11px}" +
+      "table{width:100%;border-collapse:collapse;font-size:10.5px;margin-top:4px}" +
+      "td{padding:3px 6px;border-bottom:1px solid #EEF0F5;vertical-align:top}" +
+      "td.t{color:#0D8F77;white-space:nowrap;font-family:Consolas,monospace;width:58px}" +
+      ".foot{margin-top:26px;color:#9AA2B2;font-size:10px;text-align:right}" +
+      "</style></head><body>" +
+      "<h1>" + esc(opts.title) + "</h1>" +
+      "<div class=\"meta\">일시: " + esc(opts.date) +
+      (opts.attendees ? " · 참석: " + esc(opts.attendees) : "") +
+      " · 원본: " + esc(m.filename) + "</div><div class=\"bar\"></div>" +
+      (s.agenda ? "<h2>주요 안건</h2><div class=\"sec\">" + esc(s.agenda) + "</div>" : "") +
+      (s.decide ? "<h2>결정사항</h2><ul>" + li(s.decide) + "</ul>" : "") +
+      (s.todo ? "<h2>액션아이템</h2><ul>" + li(s.todo) + "</ul>" : "") +
+      (s.open ? "<h2>미결 이슈</h2><div class=\"sec\">" + esc(s.open) + "</div>" : "") +
+      (s.raw ? "<h2>회의 요약</h2><div class=\"sec\">" + esc(s.raw) + "</div>" : "") +
+      (kw ? "<h2>키워드</h2><div class=\"kw\">" + esc(kw) + "</div>" : "") +
+      (opts.transcript && rows ? "<h2>전체 전사</h2><table>" + rows + "</table>" : "") +
+      "<div class=\"foot\">LevA 회의록 · " + new Date().toLocaleString("ko-KR") + " 생성</div>" +
+      "</body></html>";
+  }
+  $("btnExport").addEventListener("click", async () => {
+    const m = meetings.find((x) => x.path === sel);
+    if (!m) return;
+    const title = $("dTitle").value.trim() || titleOf(m);
+    const html = buildReportHtml(m, {
+      title,
+      date: m.cached_at
+        ? new Date(m.cached_at).toLocaleString("ko-KR", { dateStyle: "long", timeStyle: "short" })
+        : new Date().toLocaleDateString("ko-KR"),
+      attendees: $("dAttendees").value.trim(),
+      transcript: true,
+    });
+    $("btnExport").disabled = true;
+    const r = await window.leva.exportMeetingPdf({ html, defaultName: title + " 회의록" })
+      .catch((e) => ({ ok: false, error: String(e) }));
+    $("btnExport").disabled = false;
+    if (r && r.ok) toast("PDF 저장 완료 — 문서를 엽니다");
+    else if (!(r && r.canceled)) toast("내보내기 실패: " + ((r && r.error) || "알 수 없음"));
+  });
+
+  /* ================= 파일 추가 / 이벤트 ================= */
+  $("btnAdd").addEventListener("click", async () => {
+    const p = await window.leva.pickFile("audio").catch(() => null);
+    if (!p) return;
+    window.leva.cacheFile(p).catch(() => {});
+    toast("전사를 시작합니다 — 길이에 따라 수 분 걸릴 수 있어요");
+    setTimeout(refresh, 1200);
+  });
+
+  let refreshTimer = null;
+  function scheduleRefresh(ms = 800) {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(refresh, ms);
+  }
+  window.leva.onCacheEvent((ev) => {
+    if (!ev || !ev.phase) return;
+    if (ev.path && ev.path === sel && (ev.phase === "progress" || ev.phase === "start")) {
+      $("secProg").style.display = "block";
+      $("progStep").textContent = ev.step || STAGE_LABEL[ev.stage] || "처리 중";
+      return;
+    }
+    if (ev.phase === "done" || ev.phase === "error" || ev.phase === "embedded") {
+      if (ev.path === sel && ev.phase === "done")
+        loadTranscript(meetings.find((x) => x.path === sel));
+      scheduleRefresh();
+    }
+  });
+
+  refresh();
+  setInterval(refresh, 30000);
+</script>
+</body>
+</html>

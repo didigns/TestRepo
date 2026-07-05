@@ -1,4 +1,6 @@
-const { app, BrowserWindow, ipcMain, screen, net, dialog, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, screen, net, dialog, shell,
+        Tray, Menu, nativeImage, globalShortcut,
+        session, desktopCapturer } = require("electron");
 const path = require("path");
 const url = require("url");
 const fs = require("fs");
@@ -10,6 +12,8 @@ let settingsWin = null;
 // ---- 설정 저장/로드 --------------------------------------------------
 const DEFAULT_CONFIG = {
   alwaysOnTop: true,
+  autoStart: false,        // 부팅 시 자동 시작
+  hotkey: "Alt+Space",     // 어디서든 질문(HUD 입력) 글로벌 단축키
   pythonPath: "python",
   watchedFolders: [], // [{ path, recursive }]
   ignorePatterns: [], // ["*.tmp", ...]
@@ -351,13 +355,22 @@ function handleCacheMessage(msg) {
   }
   if (msg.type === "cache-event") {
     if (win && !win.isDestroyed()) win.webContents.send("cache-event", msg);
-    // 설정창·대시보드가 열려 있으면 진행 상황을 함께 표시
+    // 콘솔·회의록 창이 열려 있으면 진행 상황을 함께 표시
     if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send("cache-event", msg);
+    if (meetingWin && !meetingWin.isDestroyed()) meetingWin.webContents.send("cache-event", msg);
     if (dashboardWin && !dashboardWin.isDestroyed()) dashboardWin.webContents.send("cache-event", msg);
+    return;
+  }
+  if (msg.type === "live-text") {
+    // 스트리밍 라이브 자막(부분/확정) → 회의록 창으로
+    if (meetingWin && !meetingWin.isDestroyed()) meetingWin.webContents.send("live-text", msg);
     return;
   }
   if (msg.type === "chat-chunk") {
     if (win && !win.isDestroyed()) win.webContents.send("chat-chunk", msg);
+    // 콘솔·회의록 창도 스트리밍 수신(각자 자기 질문 대기 중일 때만 표시)
+    if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send("chat-chunk", msg);
+    if (meetingWin && !meetingWin.isDestroyed()) meetingWin.webContents.send("chat-chunk", msg);
     return;
   }
   if (msg.type === "result" && msg.id != null && cachePending.has(msg.id)) {
@@ -475,80 +488,291 @@ function createWindow() {
 }
 
 ipcMain.on("set-ignore-mouse", (_e, ignore) => {
-  if (!win) return;
+  // 종료 시퀀스 중(창은 파괴, 앱은 자식 정리로 잠깐 생존)에도 IPC가 올 수 있다
+  if (!win || win.isDestroyed()) return;
   win.setIgnoreMouseEvents(ignore, { forward: true });
 });
 
 ipcMain.on("quit-app", () => app.quit());
 
 // ---- 설정 창 ----------------------------------------------------------
-function openSettings() {
+// ---- 상주성: 트레이 · 글로벌 단축키 · 자동 시작 -------------------------
+let tray = null;
+
+function focusHudInput() {
+  if (!win || win.isDestroyed()) return;
+  win.show();
+  win.focus();
+  win.webContents.send("focus-input"); // HUD 입력창 열기+포커스
+}
+
+function createTray() {
+  try {
+    const iconPath = path.join(__dirname, "assets", "tray.png");
+    const img = fs.existsSync(iconPath)
+      ? nativeImage.createFromPath(iconPath)
+      : nativeImage.createEmpty();
+    tray = new Tray(img);
+    tray.setToolTip("LevA — 온디바이스 AI 비서");
+    tray.setContextMenu(Menu.buildFromTemplate([
+      { label: "콘솔 열기", click: () => openConsole("home") },
+      { label: "질문하기", click: focusHudInput },
+      { type: "separator" },
+      { label: "종료", click: () => app.quit() },
+    ]));
+    tray.on("click", () => openConsole("home"));
+  } catch (e) { /* 트레이 실패해도 앱은 정상 동작 */ }
+}
+
+function registerHotkey() {
+  try {
+    globalShortcut.unregisterAll();
+    const key = loadConfig().hotkey;
+    if (key) globalShortcut.register(key, focusHudInput);
+  } catch (e) { /* 단축키 충돌 등은 무시 */ }
+}
+
+function applyAutoStart() {
+  try {
+    app.setLoginItemSettings({ openAtLogin: !!loadConfig().autoStart });
+  } catch (e) {}
+}
+
+// 설정+대시보드를 통합한 단일 콘솔 창. 기존 IPC 이름은 유지하고
+// 섹션(home/library/chats/settings)만 라우팅한다.
+function openConsole(section) {
   if (settingsWin && !settingsWin.isDestroyed()) {
     settingsWin.focus();
+    settingsWin.webContents.send("console-nav", section || "home");
     return;
   }
   settingsWin = new BrowserWindow({
-    width: 780,
-    height: 580,
-    minWidth: 640,
-    minHeight: 480,
+    width: 1080,
+    height: 700,
+    minWidth: 880,
+    minHeight: 560,
     resizable: true,
-    minimizable: false,
-    maximizable: false,
-    title: "LevA 설정",
+    minimizable: true,
+    maximizable: true,
+    title: "LevA 콘솔",
     autoHideMenuBar: true,
-    alwaysOnTop: true,
+    backgroundColor: "#0B0D12",
+    titleBarStyle: "hidden", // 자체 다크 타이틀바(상단 topbar가 드래그 영역)
+    titleBarOverlay: { color: "#0B0D12", symbolColor: "#9AA4B8", height: 46 },
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
-  settingsWin.loadFile("settings.html");
+  settingsWin.loadFile("console.html", { hash: section || "home" });
   settingsWin.on("closed", () => (settingsWin = null));
 }
 
-ipcMain.on("open-settings", openSettings);
+function openSettings() { openConsole("settings"); }
+function openDashboard() { openConsole("home"); }
+
+ipcMain.on("open-settings", () => openSettings());
 ipcMain.on("close-settings", () => {
   if (settingsWin && !settingsWin.isDestroyed()) settingsWin.close();
 });
 
-// ---- 대시보드 창 ------------------------------------------------------
-let dashboardWin = null;
-function openDashboard() {
-  if (dashboardWin && !dashboardWin.isDestroyed()) {
-    dashboardWin.focus();
+// ---- 대시보드(=콘솔 홈) -----------------------------------------------
+let dashboardWin = null; // 구 대시보드 창 참조 — 콘솔로 통합되어 항상 null
+ipcMain.on("open-dashboard", () => openDashboard());
+ipcMain.on("close-dashboard", () => {
+  if (settingsWin && !settingsWin.isDestroyed()) settingsWin.close();
+});
+
+// ---- 회의 녹음/내보내기 --------------------------------------------------
+// 녹음 파일 저장 폴더(문서\LevA 회의록) — 감시 폴더와 무관하게 직접 캐싱 큐에 넣는다
+function meetingsDir() {
+  const d = path.join(app.getPath("documents"), "LevA 회의록");
+  try { fs.mkdirSync(d, { recursive: true }); } catch (e) {}
+  return d;
+}
+
+// 렌더러가 녹음한 WAV(16kHz mono)를 저장하고 곧바로 전사 파이프라인에 태운다
+ipcMain.handle("save-recording", async (_e, buf, title) => {
+  try {
+    const stamp = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    const base = (String(title || "").trim() || "회의") + "_" +
+      stamp.getFullYear() + pad(stamp.getMonth() + 1) + pad(stamp.getDate()) +
+      "_" + pad(stamp.getHours()) + pad(stamp.getMinutes());
+    const p = path.join(meetingsDir(), base.replace(/[\\/:*?"<>|]/g, "_") + ".wav");
+    fs.writeFileSync(p, Buffer.from(buf));
+    // 1) 목록에 즉시 등록(경량 — heavy 큐가 바빠도 바로 보임) 2) 분석 큐 투입
+    let registered = false;
+    let queued = false;
+    try {
+      const rr = await sendCacheCommand("register", { paths: [p], label: "(회의 녹음)" }, { timeout: 5000 });
+      registered = !!(rr && rr.ok);
+    } catch (e) { /* 워커 미기동 — 아래 queued로 판별 */ }
+    try {
+      sendCacheCommand("cache", { path: p, force: true }, { expectResult: false });
+      queued = true;
+    } catch (e) {}
+    return { ok: true, path: p, registered, queued };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+});
+
+// 실시간 전사: 녹음 중 오디오 조각(wav)을 whisper-server에 직접 POST
+// (렌더러→로컬 서버는 CORS에 막혀 메인 프로세스가 중계한다)
+let liveWhisperReady = false;
+ipcMain.handle("live-transcribe", async (_e, wavBuf) => {
+  try {
+    const cfg = loadConfig();
+    if (!cfg.whisperServerExe || !cfg.whisperModel)
+      return { ok: false, error: "음성 인식 엔진/모델이 설치되지 않았습니다" };
+    if (!liveWhisperReady) {
+      const r = await sendCacheCommand("whisper-ensure", {}, { timeout: 180000 }).catch(() => null);
+      if (!r || !r.ok) return { ok: false, error: (r && r.error) || "whisper 기동 실패" };
+      liveWhisperReady = true;
+    }
+    const port = cfg.whisperPort || 8082;
+    const boundary = "----LevALive" + Date.now();
+    const head = Buffer.from(
+      "--" + boundary + "\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\njson\r\n" +
+      "--" + boundary + "\r\nContent-Disposition: form-data; name=\"temperature\"\r\n\r\n0.0\r\n" +
+      "--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"live.wav\"\r\n" +
+      "Content-Type: application/octet-stream\r\n\r\n", "utf8");
+    const tail = Buffer.from("\r\n--" + boundary + "--\r\n", "utf8");
+    const body = Buffer.concat([head, Buffer.from(wavBuf), tail]);
+    const raw = await new Promise((resolve, reject) => {
+      const req = net.request({ method: "POST", url: "http://127.0.0.1:" + port + "/inference" });
+      req.setHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
+      // 파이프라인 전사가 서버를 점유 중이면 뒤에 줄을 서게 된다 —
+      // 무한 대기 대신 타임아웃을 걸고 렌더러가 재시도하게 한다.
+      const watchdog = setTimeout(() => {
+        try { req.abort(); } catch (e) {}
+        reject(new Error("busy: 전사 대기열 지연"));
+      }, 60000);
+      let data = "";
+      req.on("response", (res) => {
+        res.on("data", (c) => (data += c));
+        res.on("end", () => { clearTimeout(watchdog); resolve(data); });
+        res.on("error", (e) => { clearTimeout(watchdog); reject(e); });
+      });
+      req.on("error", (e) => { clearTimeout(watchdog); reject(e); });
+      req.write(body);
+      req.end();
+    });
+    let text = "";
+    try { text = (JSON.parse(raw).text || "").trim(); } catch (e) {}
+    return { ok: true, text };
+  } catch (e) {
+    liveWhisperReady = false; // 서버가 죽었을 수 있음 — 다음 호출에서 재기동
+    return { ok: false, error: String(e.message || e) };
+  }
+});
+
+// 스트리밍 라이브 자막(faster-whisper) — 워커 세션 제어 + 오디오 중계
+ipcMain.handle("live-start", () =>
+  sendCacheCommand("live-start", {}, { timeout: 600000 })); // 첫 실행은 모델 다운로드 포함
+ipcMain.handle("live-stop", () =>
+  sendCacheCommand("live-stop", {}, { timeout: 15000 }).catch(() => ({ ok: false })));
+ipcMain.on("live-audio", (_e, buf) => {
+  try {
+    sendCacheCommand("live-audio",
+      { b64: Buffer.from(buf).toString("base64") }, { expectResult: false });
+  } catch (e) { /* 워커 미기동 — 렌더러가 폴백 */ }
+});
+
+// 녹음 폴더의 오디오 파일 목록(캐시 DB와 무관한 폴백 — 등록 누락 복구용)
+ipcMain.handle("list-recordings", () => {
+  try {
+    const exts = new Set([".mp3", ".wav", ".m4a", ".ogg", ".flac", ".webm", ".aac", ".wma"]);
+    const out = [];
+    for (const f of fs.readdirSync(meetingsDir())) {
+      const p = path.join(meetingsDir(), f);
+      const ext = path.extname(f).toLowerCase();
+      if (!exts.has(ext)) continue;
+      try {
+        const st = fs.statSync(p);
+        out.push({ path: p, filename: f, ext, mtimeMs: st.mtimeMs, size: st.size });
+      } catch (e) {}
+    }
+    return out;
+  } catch (e) {
+    return [];
+  }
+});
+
+// 회의록 HTML 템플릿 → PDF (Electron 내장 Chromium printToPDF)
+ipcMain.handle("export-meeting-pdf", async (_e, payload) => {
+  const { html, defaultName } = payload || {};
+  let tmp = null;
+  let w = null;
+  try {
+    tmp = path.join(app.getPath("temp"), "leva_report_" + Date.now() + ".html");
+    fs.writeFileSync(tmp, String(html || ""), "utf8");
+    w = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
+    await w.loadFile(tmp);
+    const pdf = await w.webContents.printToPDF({
+      printBackground: true,
+      pageSize: "A4",
+      margins: { top: 0.4, bottom: 0.5, left: 0.45, right: 0.45 },
+    });
+    const parent = meetingWin && !meetingWin.isDestroyed() ? meetingWin : undefined;
+    const opts = {
+      title: "회의록 PDF 저장",
+      defaultPath: path.join(app.getPath("documents"),
+        String(defaultName || "회의록").replace(/[\\/:*?"<>|]/g, "_") + ".pdf"),
+      filters: [{ name: "PDF", extensions: ["pdf"] }],
+    };
+    const res = parent
+      ? await dialog.showSaveDialog(parent, opts)
+      : await dialog.showSaveDialog(opts);
+    if (res.canceled || !res.filePath) return { ok: false, canceled: true };
+    fs.writeFileSync(res.filePath, pdf);
+    shell.openPath(res.filePath); // 저장 즉시 열어 확인
+    return { ok: true, path: res.filePath };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  } finally {
+    try { if (w) w.destroy(); } catch (e) {}
+    try { if (tmp) fs.unlinkSync(tmp); } catch (e) {}
+  }
+});
+
+// ---- 회의록 전용 창 ----------------------------------------------------
+let meetingWin = null;
+function openMeeting() {
+  if (meetingWin && !meetingWin.isDestroyed()) {
+    meetingWin.focus();
     return;
   }
-  dashboardWin = new BrowserWindow({
-    width: 960,
-    height: 640,
-    minWidth: 720,
-    minHeight: 480,
+  meetingWin = new BrowserWindow({
+    width: 1120,
+    height: 720,
+    minWidth: 900,
+    minHeight: 560,
     resizable: true,
     minimizable: true,
     maximizable: true,
-    title: "LevA 대시보드",
+    title: "LevA 회의록",
     autoHideMenuBar: true,
-    backgroundColor: "#0e0f13",
+    backgroundColor: "#0B0D12",
+    titleBarStyle: "hidden",
+    titleBarOverlay: { color: "#0B0D12", symbolColor: "#9AA4B8", height: 46 },
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
-  dashboardWin.loadFile("dashboard.html");
-  dashboardWin.on("closed", () => (dashboardWin = null));
+  meetingWin.loadFile("meeting.html");
+  meetingWin.on("closed", () => (meetingWin = null));
 }
-
-ipcMain.on("open-dashboard", openDashboard);
-ipcMain.on("close-dashboard", () => {
-  if (dashboardWin && !dashboardWin.isDestroyed()) dashboardWin.close();
-});
+ipcMain.on("open-meeting", () => openMeeting());
 
 // ---- 파일 뷰어 창 -----------------------------------------------------
 let viewerWin = null;
 let pendingViewerPath = "";
+let pendingViewerHighlight = ""; // 근거 발췌 — 뷰어가 해당 대목을 하이라이트
 
 function viewerFileInfo(p) {
   if (!p) return null;
@@ -563,10 +787,16 @@ function viewerFileInfo(p) {
   };
 }
 
-function openViewer(filePath) {
+function viewerPayload() {
+  const info = viewerFileInfo(pendingViewerPath);
+  return info ? { ...info, highlight: pendingViewerHighlight } : null;
+}
+
+function openViewer(filePath, highlight) {
   pendingViewerPath = filePath || "";
+  pendingViewerHighlight = String(highlight || "");
   if (viewerWin && !viewerWin.isDestroyed()) {
-    viewerWin.webContents.send("viewer-file", viewerFileInfo(pendingViewerPath));
+    viewerWin.webContents.send("viewer-file", viewerPayload());
     viewerWin.focus();
     return;
   }
@@ -578,6 +808,8 @@ function openViewer(filePath) {
     title: "LevA 뷰어",
     backgroundColor: "#0e0f13",
     autoHideMenuBar: true,
+    titleBarStyle: "hidden", // 기본 윈도우 상단바 대신 자체 헤더 사용
+    titleBarOverlay: { color: "#0e0f13", symbolColor: "#a2abbb", height: 48 },
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -589,18 +821,25 @@ function openViewer(filePath) {
   viewerWin.on("closed", () => (viewerWin = null));
 }
 
-ipcMain.on("open-viewer", (_e, p) => openViewer(p));
-ipcMain.handle("viewer-file", () => viewerFileInfo(pendingViewerPath));
+ipcMain.on("open-viewer", (_e, p, highlight) => openViewer(p, highlight));
+ipcMain.handle("viewer-file", () => viewerPayload());
 // 임의 경로의 파일 정보(인라인 뷰어용)
 ipcMain.handle("file-info", (_e, p) => viewerFileInfo(p));
 
 // 텍스트 파일 내용 읽기(뷰어용). 크기 제한.
+// 인코딩: utf-8 → 실패 시 euc-kr(cp949) — 워커(_read_txt)와 동일한 순서라
+// 옛 한글 txt도 깨지지 않고, 근거 발췌 하이라이트 매칭도 일치한다.
+function decodeSmart(buf) {
+  try { return new TextDecoder("utf-8", { fatal: true }).decode(buf); } catch (e) {}
+  try { return new TextDecoder("euc-kr").decode(buf); } catch (e) {}
+  return buf.toString("utf8");
+}
 ipcMain.handle("read-file", (_e, p) => {
   try {
     if (!p || !fs.existsSync(p)) return { ok: false, error: "파일을 찾을 수 없습니다." };
     const st = fs.statSync(p);
     if (st.size > 5 * 1024 * 1024) return { ok: false, error: "파일이 너무 큽니다(5MB 초과). 외부 앱으로 열어 주세요." };
-    return { ok: true, text: fs.readFileSync(p, "utf8") };
+    return { ok: true, text: decodeSmart(fs.readFileSync(p)) };
   } catch (e) {
     return { ok: false, error: String(e.message || e) };
   }
@@ -713,6 +952,8 @@ ipcMain.handle("save-settings", (_e, cfg) => {
   if (win && !win.isDestroyed()) {
     win.setAlwaysOnTop(!!merged.alwaysOnTop, "screen-saver");
   }
+  if (cfg && "autoStart" in cfg) applyAutoStart();
+  if (cfg && "hotkey" in cfg) registerHotkey();
   return merged;
 });
 
@@ -780,8 +1021,17 @@ function readCacheDbDirect() {
     const rows = db.prepare(
       "SELECT * FROM file_cache ORDER BY cached_at DESC LIMIT 500"
     ).all();
+    // 파일별 임베딩 청크 수(콘솔 라이브러리의 '검색 가능' 표시용)
+    let counts = {};
+    try {
+      for (const c of db.prepare(
+        "SELECT path, COUNT(*) AS n FROM chunk_vectors GROUP BY path"
+      ).all()) counts[c.path] = c.n;
+    } catch (e) { /* chunk_vectors 없으면 0으로 */ }
     db.close();
-    return rows.map((r) => ({ ...r, keywords: safeParseKw(r.keywords) }));
+    return rows.map((r) => ({
+      ...r, keywords: safeParseKw(r.keywords), chunks: counts[r.path] || 0,
+    }));
   } catch (e) {
     // 원인을 삼키지 말고 남긴다 — node:sqlite 미지원인지 잠금인지 구분해야
     // "스캔 중 목록이 빈다" 류의 문제를 추적할 수 있다.
@@ -810,7 +1060,152 @@ ipcMain.handle("cache-list", async () => {
   }
 });
 ipcMain.handle("cache-file", async (_e, filePath) => {
+  // 즉시 등록(목록에 대기로 표시) 후 분석 큐 투입
+  try { sendCacheCommand("register", { paths: [filePath] }, { expectResult: false }); } catch (e) {}
   return sendCacheCommand("cache", { path: filePath, force: true });
+});
+ipcMain.handle("cache-retry", async (_e, filePath) => {
+  // 실패 파일 재시도 = 강제 재캐싱 (요약 다시 생성에도 사용)
+  return sendCacheCommand("cache", { path: filePath, force: true });
+});
+ipcMain.handle("cache-pause", () => sendCacheCommand("pause", {}, { timeout: 5000 }));
+ipcMain.handle("cache-resume", () => sendCacheCommand("resume", {}, { timeout: 5000 }));
+ipcMain.handle("engine-status", async () => {
+  try {
+    const r = await sendCacheCommand("engine-status", {}, { timeout: 5000 });
+    return r && r.ok ? { ok: true, engine: r.engine } : { ok: false };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+});
+ipcMain.handle("engine-restart", (_e, target) =>
+  sendCacheCommand("engine-restart", { target: target || "all" }, { timeout: 30000 }));
+ipcMain.handle("search-test", (_e, query) =>
+  sendCacheCommand("searchtest", { query: String(query || "") }, { timeout: 180000 }));
+// 뷰어 '근거 하이라이트'용 본문 추출(텍스트 PDF·스캔 PDF의 OCR 본문)
+ipcMain.handle("extract-text", (_e, p) =>
+  sendCacheCommand("extract-text", { path: String(p || "") }, { timeout: 60000 }));
+// ---- 대시보드 통계 ------------------------------------------------------
+// 지식 베이스 현황: 형식별 분포·청크·검색 가능 파일·DB 크기·중복·오래된 캐시·실패 유형
+ipcMain.handle("cache-stats", () => {
+  try {
+    const { DatabaseSync } = require("node:sqlite");
+    const db = new DatabaseSync(cacheDbPath(), { readOnly: true });
+    try { db.exec("PRAGMA busy_timeout=3000"); } catch (e) {}
+    const total = db.prepare("SELECT COUNT(*) n, COALESCE(SUM(size_bytes),0) bytes FROM file_cache").get();
+    const byExt = db.prepare(
+      "SELECT ext, COUNT(*) n, COALESCE(SUM(size_bytes),0) bytes FROM file_cache GROUP BY ext ORDER BY n DESC"
+    ).all();
+    const byStatus = db.prepare("SELECT status, COUNT(*) n FROM file_cache GROUP BY status").all();
+    let chunks = { n: 0, chars: 0 };
+    let searchable = 0;
+    try {
+      chunks = db.prepare("SELECT COUNT(*) n, COALESCE(SUM(LENGTH(text)),0) chars FROM chunk_vectors").get();
+      searchable = db.prepare("SELECT COUNT(DISTINCT path) c FROM chunk_vectors").get().c;
+    } catch (e) { /* chunk_vectors 없음 */ }
+    const dups = db.prepare(
+      "SELECT content_hash h, COUNT(*) n, GROUP_CONCAT(path, CHAR(10)) paths " +
+      "FROM file_cache WHERE COALESCE(content_hash,'') != '' " +
+      "GROUP BY content_hash HAVING COUNT(*) > 1 ORDER BY n DESC LIMIT 20"
+    ).all();
+    const failTypes = db.prepare(
+      "SELECT substr(COALESCE(error_msg,'원인 미상'),1,48) msg, COUNT(*) n " +
+      "FROM file_cache WHERE status='FAILED' GROUP BY msg ORDER BY n DESC LIMIT 10"
+    ).all();
+    // 오래된 캐시: 캐싱 후 파일이 다시 수정된 것(재캐싱 대상)
+    const rows = db.prepare(
+      "SELECT path, filename, mtime FROM file_cache WHERE status='CACHED' LIMIT 500"
+    ).all();
+    db.close();
+    const stale = [];
+    for (const r of rows) {
+      try {
+        const cur = Math.floor(fs.statSync(r.path).mtimeMs / 1000);
+        if (cur > (parseInt(r.mtime, 10) || 0) + 1) stale.push({ path: r.path, filename: r.filename });
+      } catch (e) { /* 삭제된 파일은 prune 대상 */ }
+      if (stale.length >= 100) break;
+    }
+    let dbBytes = 0;
+    try { dbBytes = fs.statSync(cacheDbPath()).size; } catch (e) {}
+    return { ok: true, total, byExt, byStatus, chunks, searchable, dbBytes, dups, failTypes, stale };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+});
+
+// 활용 통계: 참조 Top·근거 없는 질문(지식 공백)·일별 질문 수·응답 성능
+ipcMain.handle("usage-stats", () => {
+  const log = readChatLog();
+  const refCount = {};
+  const noRef = [];
+  const daily = {};
+  const ttfts = [];
+  const cps = [];
+  for (const c of log) {
+    const day = new Date(c.ts).toISOString().slice(0, 10);
+    daily[day] = (daily[day] || 0) + 1;
+    const refs = Array.isArray(c.refs) ? c.refs : [];
+    if (!refs.length) noRef.push({ ts: c.ts, question: c.question || "" });
+    for (const r of refs) if (r && r.filename) refCount[r.filename] = (refCount[r.filename] || 0) + 1;
+    if (c.perf && c.perf.ttftMs != null) {
+      ttfts.push(c.perf.ttftMs);
+      if (c.perf.genMs > 0 && c.perf.chars) cps.push(c.perf.chars / (c.perf.genMs / 1000));
+    }
+  }
+  const topRefs = Object.entries(refCount).sort((a, b) => b[1] - a[1]).slice(0, 5)
+    .map(([filename, n]) => ({ filename, n }));
+  const days = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+    days.push({ day: d.slice(5), n: daily[d] || 0 });
+  }
+  const recent = (xs, k) => xs.slice(-k);
+  const avg = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+  return {
+    ok: true,
+    totalChats: log.length,
+    topRefs,
+    noRefCount: noRef.length,
+    noRefRecent: noRef.slice(-10).reverse(),
+    daily: days,
+    avgTtftMs: Math.round(avg(recent(ttfts, 20))),
+    avgCps: Math.round(avg(recent(cps, 20))),
+    perfSamples: ttfts.length,
+  };
+});
+
+// 키워드 탐색기: 실제 파일은 휴지통으로(복구 가능), 캐시에서도 제거
+ipcMain.handle("trash-files", async (_e, paths) => {
+  const arr = (Array.isArray(paths) ? paths : []).slice(0, 500);
+  let done = 0;
+  const failed = [];
+  for (const p of arr) {
+    try { await shell.trashItem(p); done++; }
+    catch (e) { failed.push(path.basename(p)); continue; }
+    try { sendCacheCommand("uncache", { path: p }, { expectResult: false }); } catch (e) {}
+  }
+  return { ok: failed.length === 0, done, failed };
+});
+// 캐시에서만 제거(파일은 그대로) — 검색·목록 대상에서 빠짐
+ipcMain.handle("uncache-files", async (_e, paths) => {
+  let done = 0;
+  for (const p of (Array.isArray(paths) ? paths : []).slice(0, 1000)) {
+    try { await sendCacheCommand("uncache", { path: p }, { timeout: 8000 }); done++; }
+    catch (e) {}
+  }
+  return { ok: true, done };
+});
+
+// PDF 바이너리 읽기 — pdf.js 렌더링용(렌더러에서 file:// fetch가 막혀 있음)
+ipcMain.handle("read-bin", (_e, p) => {
+  try {
+    if (!p || !fs.existsSync(p)) return { ok: false, error: "파일을 찾을 수 없습니다." };
+    const st = fs.statSync(p);
+    if (st.size > 100 * 1024 * 1024) return { ok: false, error: "파일이 너무 큽니다(100MB 초과)." };
+    return { ok: true, data: fs.readFileSync(p) };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
 });
 ipcMain.handle("cache-clear-db", async () => {
   // 워커의 clear 를 우선 사용한다 — DB 삭제뿐 아니라 진행 중인 캐싱(스캔)을
@@ -854,7 +1249,9 @@ ipcMain.handle("pick-file", async (_e, kind) => {
   const parent = settingsWin && !settingsWin.isDestroyed() ? settingsWin : win;
   const filters = kind === "gguf"
     ? [{ name: "GGUF 모델", extensions: ["gguf"] }]
-    : [{ name: "실행파일", extensions: ["exe"] }];
+    : kind === "audio"
+      ? [{ name: "오디오/녹음", extensions: ["mp3", "wav", "m4a", "ogg", "flac", "webm", "aac", "wma"] }]
+      : [{ name: "실행파일", extensions: ["exe"] }];
   const res = await dialog.showOpenDialog(parent, { properties: ["openFile"], filters });
   if (res.canceled || !res.filePaths.length) return null;
   return res.filePaths[0];
@@ -893,6 +1290,13 @@ const MODEL_CATALOG = [
     desc: "의미검색(RAG)용 임베딩 · 없으면 파일명/키워드 검색만 동작 · f16 · 약 1.2GB",
     url: "https://huggingface.co/CompendiumLabs/bge-m3-gguf/resolve/main/bge-m3-f16.gguf",
     assignTo: "embedModel",
+  },
+  {
+    key: "whisperModel",
+    name: "Whisper large-v3-turbo (음성 인식)",
+    desc: "회의 녹음 전사(STT) · 한국어 지원 · q5_0 · 약 574MB",
+    url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin",
+    assignTo: "whisperModel",
   },
 ];
 
@@ -986,6 +1390,55 @@ function detectNvidia() {
 function pickLlamaBackend() {
   return detectNvidia() ? "cuda" : "vulkan";
 }
+
+// ---- whisper.cpp(STT 서버) 자동 설치 -----------------------------------
+function whisperCppDir() {
+  return path.join(installDir(), "whispercpp");
+}
+function whisperServerPath() {
+  for (const n of ["whisper-server.exe", "server.exe"]) {
+    const p = path.join(whisperCppDir(), n);
+    if (fs.existsSync(p)) return p;
+  }
+  return "";
+}
+ipcMain.handle("whisper-setup", async () => {
+  // 이미 설치돼 있으면 경로만 연결
+  let exe = whisperServerPath();
+  if (exe) { saveConfig({ whisperServerExe: exe }); return { ok: true, path: exe }; }
+  let release;
+  try {
+    release = await httpGetJson("https://api.github.com/repos/ggml-org/whisper.cpp/releases/latest");
+  } catch (e) {
+    return { ok: false, error: "whisper.cpp 릴리스 조회 실패: " + (e.message || e) };
+  }
+  const items = (release.assets || []).map((a) => ({ name: a.name, url: a.browser_download_url }));
+  const first = (re) => items.find((x) => re.test(x.name));
+  // CUDA 빌드 우선(GPU 가속), 다음 일반/blas x64 zip
+  const asset = first(/win.*cuda.*x64.*\.zip$/i) || first(/cublas.*x64.*\.zip$/i)
+    || first(/bin-x64\.zip$/i) || first(/win.*x64.*\.zip$/i) || first(/x64.*\.zip$/i);
+  if (!asset) return { ok: false, error: "Windows용 whisper.cpp 자산을 찾지 못했습니다." };
+  try { fs.mkdirSync(whisperCppDir(), { recursive: true }); } catch (e) {}
+  const tmp = path.join(whisperCppDir(), "_dl.zip");
+  try {
+    await downloadToFile(asset.url, tmp, (p) =>
+      sendHfProgress({ key: "whisperSetup", ...p }));
+  } catch (e) {
+    return { ok: false, error: "다운로드 실패: " + (e.message || e) };
+  }
+  const ex = await extractZip(tmp, whisperCppDir());
+  try { fs.unlinkSync(tmp); } catch (e) {}
+  if (!ex.ok) return { ok: false, error: "압축 해제 실패: " + ex.error };
+  flattenExtract(whisperCppDir(), "whisper-server.exe");
+  flattenExtract(whisperCppDir(), "server.exe");
+  exe = whisperServerPath();
+  if (!exe) return { ok: false, error: "whisper-server.exe를 찾지 못했습니다(압축 구조 확인)." };
+  saveConfig({ whisperServerExe: exe });
+  sendHfProgress({ key: "whisperSetup", percent: 100, done: true });
+  // 상시 기동 정책 — 설치 즉시 워커가 설정을 리로드해 서버를 띄운다
+  try { sendCacheCommand("whisper-ensure", {}, { expectResult: false }); } catch (e) {}
+  return { ok: true, path: exe };
+});
 
 function httpGetJson(u) {
   return new Promise((resolve, reject) => {
@@ -1281,31 +1734,36 @@ function runDownload(m) {
 async function computeAnswer(prompt) {
   try {
     const r = await sendCacheCommand("chat", { prompt }, { timeout: 300000 });
-    if (r && r.ok && (r.answer || "").trim()) return r.answer.trim();
+    if (r && r.ok && (r.answer || "").trim())
+      return { answer: r.answer.trim(), refs: Array.isArray(r.refs) ? r.refs : [],
+               perf: r.perf || null };
     if (r && r.error) {
       if (/textModel|gguf|경로/i.test(r.error))
-        return "대화 모델이 아직 없어요. 설정 → 모델에서 'Gemma 4 E4B'를 받아 주세요.";
-      return "llama.cpp 응답 오류: " + r.error;
+        return { answer: "대화 모델이 아직 없어요. 설정 → 모델에서 'Gemma 4 E4B'를 받아 주세요.", refs: [] };
+      return { answer: "llama.cpp 응답 오류: " + r.error, refs: [] };
     }
-    return "llama.cpp 서버에서 답을 받지 못했어요.";
+    return { answer: "llama.cpp 서버에서 답을 받지 못했어요.", refs: [] };
   } catch (e) {
-    return "로컬 llama.cpp 서버에 연결하지 못했어요. 설정에서 llama-server 경로와 모델(gguf)이 지정됐는지 확인해 주세요.";
+    return { answer: "로컬 llama.cpp 서버에 연결하지 못했어요. 설정에서 llama-server 경로와 모델(gguf)이 지정됐는지 확인해 주세요.", refs: [] };
   }
 }
 
 ipcMain.handle("ask-llm", async (_e, prompt) => {
-  const answer = await computeAnswer(prompt);
+  const { answer, refs, perf } = await computeAnswer(prompt);
   try {
-    appendChatLog({ ts: Date.now(), question: String(prompt || ""), answer });
+    // refs: 답변 근거 / perf: TTFT·생성 속도 — 콘솔 통계에서 사용
+    appendChatLog({ ts: Date.now(), question: String(prompt || ""), answer, refs, perf });
   } catch (e) {}
-  if (dashboardWin && !dashboardWin.isDestroyed())
-    dashboardWin.webContents.send("chat-logged");
+  if (settingsWin && !settingsWin.isDestroyed())
+    settingsWin.webContents.send("chat-logged");
   return answer;
 });
 
 ipcMain.handle("chat-log", () => readChatLog());
 ipcMain.handle("clear-chat-log", () => {
   try { fs.writeFileSync(chatLogPath(), "[]", "utf8"); } catch (e) {}
+  // 워커의 멀티턴 대화 맥락도 함께 초기화
+  try { sendCacheCommand("chat-reset", {}, { expectResult: false }); } catch (e) {}
   return true;
 });
 
@@ -1313,21 +1771,72 @@ app.whenReady().then(async () => {
   syncDownloadedModels();
   await maybeSetupLlamaCpp(); // llamacpp 없으면 GitHub 릴리스에서 받아 압축해제
   resolveLlamaServer();
+  // whisper.cpp가 이미 설치돼 있으면 경로 자동 연결
+  try {
+    const wexe = whisperServerPath();
+    if (wexe && !loadConfig().whisperServerExe) saveConfig({ whisperServerExe: wexe });
+  } catch (e) {}
   createWindow();
   startDaemon();
   startCacheWorker();
+  createTray();       // 오브가 가려져도 트레이로 항상 접근 가능
+  registerHotkey();   // 기본 Alt+Space — 어디서든 질문
+  applyAutoStart();   // 부팅 시 자동 시작(설정 토글 반영)
+  // 회의 녹음: 마이크 권한 자동 허용 + 시스템 소리(루프백) 캡처 핸들러
+  try {
+    session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) =>
+      cb(permission === "media" || permission === "display-capture"));
+    session.defaultSession.setDisplayMediaRequestHandler(async (_req, callback) => {
+      try {
+        const sources = await desktopCapturer.getSources({ types: ["screen"] });
+        callback({ video: sources[0], audio: "loopback" }); // Windows 시스템 오디오
+      } catch (e) { callback({}); }
+    });
+  } catch (e) { /* 구버전 Electron 등 — 녹음은 마이크만 동작 */ }
 });
 
-app.on("before-quit", () => {
+app.on("will-quit", () => {
+  try { globalShortcut.unregisterAll(); } catch (e) {}
+});
+
+// 자식 프로세스 트리 전체 강제 종료 (Windows: taskkill /T 로 손자 llama-server.exe까지)
+function killProcTree(proc) {
+  if (!proc || proc.exitCode !== null) return;
+  try {
+    if (process.platform === "win32") {
+      require("child_process").spawnSync(
+        "taskkill", ["/pid", String(proc.pid), "/T", "/F"],
+        { windowsHide: true }
+      );
+    } else {
+      proc.kill("SIGKILL");
+    }
+  } catch (e) {}
+}
+
+app.on("before-quit", (e) => {
+  if (appQuitting) return; // 재진입 방지(app.exit 경로)
   appQuitting = true;
-  if (daemon) {
-    try { sendCommand("shutdown").catch(() => {}); } catch (e) {}
-    setTimeout(() => { if (daemon) daemon.kill(); }, 300);
-  }
-  if (cacheProc) {
-    try { sendCacheCommand("shutdown", {}, { expectResult: false }); } catch (e) {}
-    setTimeout(() => { if (cacheProc) cacheProc.kill(); }, 500);
-  }
+  if (!daemon && !cacheProc) return;
+  // 워커가 llama-server를 정리하고 스스로 종료할 시간을 확보한다.
+  // (기존 setTimeout 방식은 Electron이 타이머를 기다리지 않아 실행 보장이 없었고,
+  //  kill()은 워커만 죽여 손자인 llama-server가 고아로 남았다)
+  e.preventDefault();
+  try { if (daemon) sendCommand("shutdown").catch(() => {}); } catch (err) {}
+  try { if (cacheProc) sendCacheCommand("shutdown", {}, { expectResult: false }); } catch (err) {}
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    clearInterval(poll);
+    clearTimeout(deadline);
+    killProcTree(daemon); daemon = null;
+    killProcTree(cacheProc); cacheProc = null;
+    app.exit(0);
+  };
+  // 둘 다 스스로 종료하면 즉시 종료, 아니면 3초 후 트리 강제 종료
+  const poll = setInterval(() => { if (!daemon && !cacheProc) finish(); }, 100);
+  const deadline = setTimeout(finish, 3000);
 });
 
 // (HF 다운로드 기능 포함)

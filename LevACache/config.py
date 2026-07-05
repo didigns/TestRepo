@@ -22,7 +22,7 @@ DEFAULT_CONFIG = {
     # 캐시 DB
     "dbPath": "",           # 비우면 사용자 데이터 경로에 leva-cache.db
     # PDF 처리
-    "pdfMaxPages": 5,       # 비전 처리 시 렌더링할 최대 페이지
+    "pdfMaxPages": 0,       # 스캔 PDF OCR 페이지 수 (0=전체 페이지)
     # 반복(loop) 추출: 본문을 chunkChars 자로 잘라 최대 maxChunks 조각 순차 처리
     "chunkChars": 2000,
     "maxChunks": 12,
@@ -30,12 +30,23 @@ DEFAULT_CONFIG = {
     "embedModel": "",       # 임베딩 모델 gguf (예: bge-m3)
     "embedPort": 8081,      # 임베딩 전용 서버 포트(메인과 분리)
     "embedNCtx": 2048,
-    "embedPooling": "mean",
+    # 풀링은 비워 두면 GGUF 메타데이터의 모델 기본값을 쓴다(BGE-M3 = CLS).
+    # 과거 "mean" 강제는 CLS로 학습된 BGE-M3의 임베딩 공간을 붕괴시켜
+    # (무관한 청크끼리 코사인 0.8+) 의미검색을 무력화했다.
+    "embedPooling": "",
     "embedMinScore": 0.25,  # 코사인 최소 유사도
     # 청크 임베딩(검색 정확도용, 분석용보다 촘촘하게)
     "embedChunkChars": 1000,
     "embedMaxChunks": 0,      # 청크 개수 제한(0=무제한, 본문 전체 임베딩)
     "embedBatch": 64,         # 임베딩 요청 1건당 청크 수(무제한 청크 대비 배치 처리)
+    # 음성(STT) — whisper.cpp whisper-server
+    "whisperServerExe": "",   # whisper-server.exe 경로(자동 설치 시 채워짐)
+    "whisperModel": "",       # ggml whisper 모델(.bin) 경로
+    "whisperPort": 8082,      # STT 전용 서버 포트
+    "whisperLanguage": "auto",  # 전사 언어(auto=자동 감지)
+    "ffmpegExe": "",          # m4a 등 변환용 ffmpeg (비우면 PATH에서 탐색)
+    # 실시간 자막(스트리밍) — faster-whisper 설치 시 자동 사용, 없으면 VAD 폴백
+    "liveSttModel": "large-v3-turbo",
 }
 
 

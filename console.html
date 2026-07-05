@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<title>LevA 콘솔</title>
+<style>
+  :root {
+    --bg: #0B0D12; --panel: #131720; --panel2: #1A1F2B;
+    --line: #252B3A; --line2: #1C212E;
+    --tx: #E8ECF4; --tx2: #9AA4B8; --tx3: #6B7690;
+    --mint: #45D6B8; --ok: #3FD68C; --warn: #F2B04B; --bad: #F26D6D; --info: #5BA8F5;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--tx);
+    font: 13px/1.5 "Segoe UI", "Malgun Gothic", sans-serif;
+    display: flex; overflow: hidden;
+  }
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-thumb { background: #2A3040; border-radius: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* ---- 좌측 레일 ---- */
+  #rail {
+    width: 190px; flex: none; border-right: 1px solid var(--line2);
+    padding: 14px 10px; display: flex; flex-direction: column; gap: 3px;
+  }
+  #rail .brand {
+    display: flex; align-items: center; gap: 9px; padding: 4px 10px 16px;
+  }
+  #rail .brand .orb {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #63E0C8, #1E9E82);
+  }
+  #rail .brand b { font-size: 14.5px; font-weight: 600; letter-spacing: 0.2px; }
+  .navbtn {
+    display: flex; align-items: center; gap: 9px; padding: 9px 12px;
+    border-radius: 8px; color: var(--tx2); cursor: pointer; user-select: none;
+    font-size: 13px; border: none; background: none; text-align: left; width: 100%;
+  }
+  .navbtn:hover { background: #161B26; color: var(--tx); }
+  .navbtn.on { background: #16241F; color: var(--mint); font-weight: 600; }
+  .navbtn svg { width: 16px; height: 16px; flex: none; }
+  #railFoot { margin-top: auto; padding: 10px 12px; font-size: 11px; color: var(--tx3); }
+
+  /* ---- 본문 ---- */
+  #main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  #topbar {
+    height: 46px; flex: none; display: flex; align-items: center; gap: 14px;
+    padding: 0 150px 0 18px; border-bottom: 1px solid var(--line2);
+    -webkit-app-region: drag; /* 커스텀 타이틀바(창 드래그) — 우측은 창 버튼 영역 */
+  }
+  #topbar button, #topbar input { -webkit-app-region: no-drag; }
+  #topbar h1 { font-size: 14.5px; font-weight: 600; }
+  #topStatus { margin-left: auto; display: flex; align-items: center; gap: 14px; font-size: 12px; color: var(--tx3); }
+  .live-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; vertical-align: 0; }
+  section.page { flex: 1; overflow-y: auto; padding: 16px 18px; display: none; }
+  section.page.on { display: block; }
+
+  /* ---- 공용 컴포넌트 ---- */
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px; margin-bottom: 12px;
+  }
+  .card h2 { font-size: 13px; font-weight: 600; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .card h2 .sub { font-weight: 400; font-size: 11.5px; color: var(--tx3); }
+  .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .statnum { font-size: 22px; font-weight: 600; color: var(--mint); }
+  .statlbl { font-size: 11px; color: var(--tx3); }
+  .statrow { display: flex; gap: 18px; margin-bottom: 10px; }
+  .extbar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin: 8px 0 6px; }
+  .extbar i { display: block; height: 100%; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; color: var(--tx3); }
+  .legend b { color: var(--tx2); font-weight: 500; }
+  .minibars { display: flex; align-items: flex-end; gap: 3px; height: 42px; margin-top: 8px; }
+  .minibars .mb { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .minibars .mb i { width: 100%; background: var(--mint); border-radius: 2px 2px 0 0; min-height: 2px; opacity: 0.85; }
+  .minibars .mb span { font-size: 9px; color: var(--tx3); }
+  .kwchip { cursor: pointer; user-select: none; }
+  .kwchip.on { outline: 1.5px solid var(--mint); }
+  .kwchip .n { opacity: 0.65; margin-left: 3px; }
+  .btn {
+    background: none; border: 1px solid #2E3648; border-radius: 7px;
+    color: var(--tx2); font-size: 12px; padding: 5px 12px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 5px; font-family: inherit;
+  }
+  .btn:hover { border-color: #3D475E; color: var(--tx); background: #161B26; }
+  .btn.mint { color: var(--mint); border-color: #24443C; }
+  .btn.mint:hover { background: #12241F; border-color: var(--mint); }
+  .btn.danger { color: var(--bad); border-color: #45262C; }
+  .btn.danger:hover { background: #241318; border-color: var(--bad); }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+  .chip {
+    font-size: 11px; border-radius: 5px; padding: 2px 8px; display: inline-flex;
+    align-items: center; gap: 5px; white-space: nowrap;
+  }
+  .chip.gray { color: var(--tx2); background: var(--panel2); }
+  .chip.warn { color: var(--warn); background: #241F16; }
+  .chip.info { color: var(--info); background: #141E2C; }
+  .chip.ok   { color: var(--ok);   background: #12251C; }
+  .chip.bad  { color: var(--bad);  background: #271518; }
+  .chip.mint { color: var(--mint); background: #122622; }
+  .chip.clickable { cursor: pointer; }
+  .chip.clickable:hover { outline: 1px solid var(--mint); }
+  .bar { height: 6px; background: var(--line2); border-radius: 3px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--mint); transition: width 0.4s; }
+  input[type="text"], input[type="number"], select {
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 7px;
+    color: var(--tx); font-size: 12.5px; padding: 7px 10px; font-family: inherit;
+    outline: none; width: 100%;
+  }
+  input:focus, select:focus { border-color: var(--mint); }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .empty { color: var(--tx3); font-size: 12px; padding: 14px 4px; text-align: center; }
+
+  /* ---- 홈: 엔진 카드 ---- */
+  .engcard { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; position: relative; }
+  .engcard .k { font-size: 11px; color: var(--tx3); }
+  .engcard .v { font-size: 13px; font-weight: 600; margin: 3px 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .engcard .s { font-size: 11.5px; }
+  .engcard .re {
+    position: absolute; top: 9px; right: 9px; background: none; border: none;
+    color: var(--tx3); cursor: pointer; font-size: 14px; padding: 3px; border-radius: 5px;
+  }
+  .engcard .re:hover { color: var(--mint); background: var(--panel2); }
+
+  /* ---- 홈: 현재 파일 ---- */
+  #curFile { background: var(--panel2); border-radius: 8px; padding: 10px 12px; display: none; align-items: center; gap: 11px; }
+  #curFile .nm { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #curFile .st { font-size: 11.5px; color: var(--tx3); margin-top: 1px; }
+  .stepdots { display: flex; gap: 5px; align-items: center; flex: none; }
+  .stepdots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+  .stepdots i.done { background: var(--ok); }
+  .stepdots i.cur { background: var(--mint); box-shadow: 0 0 0 3px #1E3B34; }
+
+  /* ---- 목록 행 ---- */
+  .frow {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+    border-radius: 8px; cursor: pointer; border: 1px solid transparent;
+  }
+  .frow:hover { background: #161B26; }
+  .frow.sel { background: #16241F; border-color: #24443C; }
+  .frow .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .frow .nm { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12.5px; }
+  .frow .meta { font-size: 11px; color: var(--tx3); flex: none; }
+  .st-CACHED { background: var(--ok); }
+  .st-FAILED { background: var(--bad); }
+  .st-PENDING { background: var(--warn); }
+
+  /* ---- 라이브러리 레이아웃 ---- */
+  #libWrap { display: flex; gap: 12px; height: 100%; }
+  #libLeft { flex: 1.3; min-width: 0; display: flex; flex-direction: column; }
+  #libList { flex: 1; overflow-y: auto; margin-top: 10px; }
+  #libRight { flex: 1; min-width: 0; overflow-y: auto; }
+  #detail .kv { margin-bottom: 9px; }
+  #detail .kv .k { font-size: 11px; color: var(--tx3); margin-bottom: 2px; }
+  #detail .kv .v { font-size: 12.5px; word-break: break-all; }
+  .kwwrap { display: flex; flex-wrap: wrap; gap: 5px; }
+
+  /* ---- 대화 기록 ---- */
+  .qa { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; background: var(--panel); }
+  .qa .q { font-size: 12.5px; color: var(--tx2); margin-bottom: 7px; }
+  .qa .q b { color: var(--mint); font-weight: 600; margin-right: 6px; }
+  .qa .a { font-size: 12.5px; background: var(--panel2); border-radius: 8px; padding: 9px 12px; white-space: pre-wrap; word-break: break-word; }
+  .qa .refs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .qa .t { font-size: 10.5px; color: var(--tx3); margin-top: 7px; }
+
+  /* ---- 설정 ---- */
+  .set-row { display: flex; align-items: center; gap: 12px; padding: 9px 2px; border-bottom: 1px solid var(--line2); }
+  .set-row:last-child { border-bottom: none; }
+  .set-row .lbl { flex: 1; }
+  .set-row .lbl .t1 { font-size: 12.5px; }
+  .set-row .lbl .t2 { font-size: 11px; color: var(--tx3); margin-top: 1px; }
+  .toggle { position: relative; width: 36px; height: 20px; flex: none; cursor: pointer; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle i { position: absolute; inset: 0; background: var(--line); border-radius: 10px; transition: 0.15s; }
+  .toggle i::after { content: ""; position: absolute; width: 14px; height: 14px; border-radius: 50%; background: #8B94A6; top: 3px; left: 3px; transition: 0.15s; }
+  .toggle input:checked + i { background: #1E4A3F; }
+  .toggle input:checked + i::after { background: var(--mint); left: 19px; }
+  .mdl { display: flex; align-items: center; gap: 10px; padding: 9px 2px; border-bottom: 1px solid var(--line2); }
+  .mdl:last-child { border-bottom: none; }
+  .mdl .info { flex: 1; min-width: 0; }
+  .mdl .n { font-size: 12.5px; }
+  .mdl .d { font-size: 11px; color: var(--tx3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mdl .prog { width: 130px; flex: none; display: none; }
+  .hint { font-size: 11px; color: var(--tx3); margin-top: 8px; }
+  #toast {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+    background: #1D2430; border: 1px solid var(--line); color: var(--tx);
+    border-radius: 8px; padding: 8px 16px; font-size: 12px; display: none; z-index: 50;
+  }
+</style>
+</head>
+<body>
+  <nav id="rail">
+    <div class="brand"><span class="orb"></span><b>LevA 콘솔</b></div>
+    <button class="navbtn on" data-page="home">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>홈
+    </button>
+    <button class="navbtn" data-page="library">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>라이브러리
+    </button>
+    <button class="navbtn" data-page="chats">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>대화 기록
+    </button>
+    <button class="navbtn" id="navMeeting">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>회의록 ↗
+    </button>
+    <button class="navbtn" data-page="settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>설정
+    </button>
+    <div id="railFoot">온디바이스 AI 비서<br/>모든 데이터는 내 PC에만</div>
+  </nav>
+
+  <div id="main">
+    <div id="topbar">
+      <h1 id="pageTitle">홈</h1>
+      <div id="topStatus">
+        <span id="tsEngine"><span class="live-dot" style="background:var(--tx3)"></span>엔진 확인 중…</span>
+        <span id="tsRam"></span>
+      </div>
+    </div>
+
+    <!-- ============ 홈 ============ -->
+    <section class="page on" id="page-home">
+      <div class="grid3">
+        <div class="engcard" id="engMain">
+          <div class="k">대화 모델 · 포트 <span id="engMainPort">-</span></div>
+          <div class="v" id="engMainName">-</div>
+          <div class="s" id="engMainState" style="color:var(--tx3)">확인 중…</div>
+          <button class="re" id="btnRestartMain" title="대화/비전 서버 재시작">⟳</button>
+        </div>
+        <div class="engcard" id="engEmbed">
+          <div class="k">임베딩 · 포트 <span id="engEmbedPort">-</span></div>
+          <div class="v" id="engEmbedName">-</div>
+          <div class="s" id="engEmbedState" style="color:var(--tx3)">확인 중…</div>
+          <button class="re" id="btnRestartEmbed" title="임베딩 서버 재시작">⟳</button>
+        </div>
+        <div class="engcard">
+          <div class="k">비전 모델 (스왑)</div>
+          <div class="v" id="engVisName">-</div>
+          <div class="s" id="engVisState" style="color:var(--tx3)">확인 중…</div>
+        </div>
+        <div class="engcard" id="engWhisper">
+          <div class="k">음성 인식 · 포트 <span id="engWspPort">-</span></div>
+          <div class="v" id="engWspName">-</div>
+          <div class="s" id="engWspState" style="color:var(--tx3)">확인 중…</div>
+          <button class="re" id="btnRestartWsp" title="음성 인식 서버 재시작">⟳</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>캐싱 파이프라인
+          <span class="sub" id="pipeSummary">-</span>
+          <span style="margin-left:auto; display:flex; gap:7px;">
+            <button class="btn" id="btnPause">⏸ 일시정지</button>
+            <button class="btn" id="btnRescan">다시 스캔</button>
+            <button class="btn danger" id="btnClearDb">DB 초기화</button>
+          </span>
+        </h2>
+        <div class="bar" style="margin-bottom:10px;"><i id="pipeBar" style="width:0%"></i></div>
+        <div class="row" style="flex-wrap:wrap; gap:6px; margin-bottom:11px;" id="stageChips"></div>
+        <div id="curFile">
+          <div class="stepdots" id="curDots"><i></i><i></i><i></i></div>
+          <div style="flex:1; min-width:0;">
+            <div class="nm" id="curName"></div>
+            <div class="st" id="curStep"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card" style="margin-bottom:0;">
+          <h2>지식 베이스 <span class="sub">AI가 아는 내 문서</span></h2>
+          <div class="statrow">
+            <div><div class="statnum" id="kbCoverage">-</div><div class="statlbl">검색 가능 비율</div></div>
+            <div><div class="statnum" id="kbFiles">-</div><div class="statlbl">파일</div></div>
+            <div><div class="statnum" id="kbChunks">-</div><div class="statlbl">청크</div></div>
+            <div><div class="statnum" id="kbSize">-</div><div class="statlbl">인덱스 DB</div></div>
+          </div>
+          <div class="extbar" id="kbExtBar"></div>
+          <div class="legend" id="kbExtLegend"></div>
+        </div>
+        <div class="card" style="margin-bottom:0;">
+          <h2>응답 성능 <span class="sub">최근 20개 대화 평균</span></h2>
+          <div class="statrow">
+            <div><div class="statnum" id="pfTtft">-</div><div class="statlbl">첫 응답까지</div></div>
+            <div><div class="statnum" id="pfCps">-</div><div class="statlbl">생성 속도(자/초)</div></div>
+            <div><div class="statnum" id="pfChats">-</div><div class="statlbl">누적 대화</div></div>
+          </div>
+          <div class="statlbl" id="pfNote" style="margin-top:6px;"></div>
+        </div>
+      </div>
+
+      <div class="card" id="mgmtCard" style="display:none;">
+        <h2>관리 필요 <span class="sub">정리하면 좋은 것들</span></h2>
+        <div id="mgmtStale" style="display:none; margin-bottom:10px;">
+          <div class="row" style="margin-bottom:6px;">
+            <span class="chip warn" id="staleCount"></span>
+            <span style="font-size:11.5px; color:var(--tx3);">수정된 뒤 재캐싱되지 않음</span>
+            <button class="btn mint" id="btnRecacheStale" style="margin-left:auto;">일괄 재캐싱</button>
+          </div>
+          <div id="staleList" style="font-size:11.5px; color:var(--tx2); max-height:90px; overflow-y:auto;"></div>
+        </div>
+        <div id="mgmtDups" style="display:none; margin-bottom:10px;">
+          <div class="row" style="margin-bottom:6px;">
+            <span class="chip info" id="dupCount"></span>
+            <span style="font-size:11.5px; color:var(--tx3);">내용이 완전히 같은 파일 그룹(경로만 다름)</span>
+          </div>
+          <div id="dupList" style="font-size:11.5px; color:var(--tx2); max-height:110px; overflow-y:auto;"></div>
+        </div>
+        <div id="mgmtFails" style="display:none;">
+          <div class="row" style="margin-bottom:6px;"><span class="chip bad">실패 유형</span></div>
+          <div id="failTypeList" style="font-size:11.5px; color:var(--tx2);"></div>
+        </div>
+      </div>
+
+      <div class="card" id="failCard" style="border-color:#3A2530; display:none;">
+        <h2 style="color:var(--bad)">실패 <span id="failCount"></span>건 — 원인과 함께</h2>
+        <div id="failList"></div>
+      </div>
+
+      <div class="card">
+        <h2>최근 완료 <span class="sub">키워드·요약까지 끝난 파일</span></h2>
+        <div id="recentList"><div class="empty">아직 없습니다</div></div>
+      </div>
+    </section>
+
+    <!-- ============ 라이브러리 ============ -->
+    <section class="page" id="page-library">
+      <div id="libWrap">
+        <div id="libLeft">
+          <div class="row">
+            <input type="text" id="libSearch" placeholder="파일명·키워드로 필터" />
+            <select id="libFilter" style="width:110px; flex:none;">
+              <option value="">전체</option>
+              <option value="CACHED">완료</option>
+              <option value="PENDING">진행/대기</option>
+              <option value="FAILED">실패</option>
+            </select>
+          </div>
+          <div id="libList"></div>
+        </div>
+        <div id="libRight">
+          <div class="card" id="detail" style="display:none;">
+            <h2 id="dtName">-</h2>
+            <div class="kv"><div class="k">상태</div><div class="v" id="dtState">-</div></div>
+            <div class="kv"><div class="k">요약</div><div class="v" id="dtSummary">-</div></div>
+            <div class="kv"><div class="k">키워드</div><div class="v kwwrap" id="dtKeywords"></div></div>
+            <div class="kv"><div class="k">임베딩 청크</div><div class="v" id="dtChunks">-</div></div>
+            <div class="kv"><div class="k">경로</div><div class="v" id="dtPath" style="color:var(--tx3); font-size:11px;">-</div></div>
+            <div class="row" style="margin-top:12px;">
+              <button class="btn mint" id="dtOpen">뷰어로 열기</button>
+              <button class="btn" id="dtRecache">다시 캐싱</button>
+            </div>
+          </div>
+          <div class="card">
+            <h2>키워드 탐색기 <span class="sub">키워드를 골라 파일을 일괄 정리</span></h2>
+            <div class="kwwrap" id="kwCloud"><span style="color:var(--tx3); font-size:11.5px;">3단계(키워드) 완료 파일이 생기면 여기 모입니다</span></div>
+            <div id="kwActions" style="display:none; margin-top:11px;">
+              <div id="kwFiles" style="max-height:130px; overflow-y:auto; margin-bottom:8px;"></div>
+              <div class="row">
+                <span style="font-size:11.5px; color:var(--tx3);" id="kwCount"></span>
+                <button class="btn" id="kwUncache" style="margin-left:auto;">캐시에서 제거</button>
+                <button class="btn danger" id="kwTrash">휴지통으로 이동</button>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <h2>검색 테스트 <span class="sub">질문이 어떤 청크와 몇 점으로 매칭되는지 확인</span></h2>
+            <div class="row">
+              <input type="text" id="stQuery" placeholder="예: 다크메이지 주인공이 누구야?" />
+              <button class="btn mint" id="stRun" style="flex:none;">검색</button>
+            </div>
+            <div id="stResults" style="margin-top:10px;"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 대화 기록 ============ -->
+    <section class="page" id="page-chats">
+      <div class="row" style="margin-bottom:12px;">
+        <input type="text" id="chatInput" placeholder="무엇이든 물어보세요… (파일 내용 기반, 후속 질문 가능)" />
+        <button class="btn mint" id="chatSend" style="flex:none;">보내기</button>
+        <button class="btn danger" id="btnClearChat" style="flex:none;">기록 삭제</button>
+      </div>
+      <div style="font-size:11px; color:var(--tx3); margin-bottom:12px;" id="chatCount"></div>
+      <div class="grid2" id="usageCards" style="display:none;">
+        <div class="card" style="margin-bottom:0;">
+          <h2>자주 참조된 문서 <span class="sub">AI가 근거로 많이 쓴 파일</span></h2>
+          <div id="topRefs"></div>
+          <div class="minibars" id="dailyBars"></div>
+        </div>
+        <div class="card" style="margin-bottom:0;">
+          <h2>지식 공백 <span class="sub">근거 없이 답한 질문 — 관련 문서가 없다는 신호</span></h2>
+          <div class="statrow" style="margin-bottom:6px;">
+            <div><div class="statnum" id="noRefPct">-</div><div class="statlbl">근거 없는 답변 비율</div></div>
+          </div>
+          <div id="noRefList" style="font-size:11.5px; color:var(--tx2); max-height:120px; overflow-y:auto;"></div>
+        </div>
+      </div>
+      <div id="chatList"><div class="empty">대화 기록이 없습니다</div></div>
+    </section>
+
+    <!-- ============ 설정 ============ -->
+    <section class="page" id="page-settings">
+      <div class="card">
+        <h2>일반</h2>
+        <div class="set-row">
+          <div class="lbl"><div class="t1">항상 위에 표시</div><div class="t2">HUD 오브를 다른 창 위에 고정합니다</div></div>
+          <label class="toggle"><input type="checkbox" id="cfgTop" /><i></i></label>
+        </div>
+        <div class="set-row">
+          <div class="lbl"><div class="t1">파일 이벤트 알림</div><div class="t2">감시 폴더에 변화가 생기면 말풍선으로 알립니다</div></div>
+          <label class="toggle"><input type="checkbox" id="cfgNotify" /><i></i></label>
+        </div>
+        <div class="set-row">
+          <div class="lbl"><div class="t1">자동 캐싱</div><div class="t2">새 파일·수정 파일을 자동으로 분석합니다</div></div>
+          <label class="toggle"><input type="checkbox" id="cfgAutoCache" /><i></i></label>
+        </div>
+        <div class="set-row">
+          <div class="lbl"><div class="t1">부팅 시 자동 시작</div><div class="t2">Windows 로그인과 함께 LevA를 시작합니다</div></div>
+          <label class="toggle"><input type="checkbox" id="cfgAutoStart" /><i></i></label>
+        </div>
+        <div class="set-row">
+          <div class="lbl"><div class="t1">질문 단축키</div><div class="t2">어디서든 이 키로 HUD 입력창을 엽니다 (비우면 끔)</div></div>
+          <input type="text" id="cfgHotkey" style="width:150px; flex:none;" placeholder="Alt+Space" />
+          <button class="btn" id="btnSaveHotkey" style="flex:none;">저장</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>폴더 감시 <span style="margin-left:auto;"><button class="btn mint" id="btnAddFolder">+ 폴더 추가</button></span></h2>
+        <div id="folderList"><div class="empty">감시 중인 폴더가 없습니다</div></div>
+        <div class="row" style="margin-top:10px;">
+          <input type="text" id="cfgIgnore" placeholder="제외 패턴 (쉼표 구분, 예: node_modules, *.tmp)" />
+          <button class="btn" id="btnSaveIgnore" style="flex:none;">저장</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>모델 다운로드 <span class="sub">Hugging Face에서 받아 자동 연결</span></h2>
+        <div id="modelList"><div class="empty">목록 불러오는 중…</div></div>
+        <div class="set-row" style="border-top:1px solid var(--line2); margin-top:6px;">
+          <div class="lbl">
+            <div class="t1">음성 인식 엔진 (whisper.cpp)</div>
+            <div class="t2" id="wsSetupHint">회의 녹음(mp3·wav 등) 전사에 필요 — 모델과 함께 설치하세요</div>
+          </div>
+          <button class="btn mint" id="btnWhisperSetup">엔진 설치</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>엔진 파라미터</h2>
+        <div class="row" style="gap:14px; flex-wrap:wrap;">
+          <div style="flex:1; min-width:140px;">
+            <div class="hint" style="margin:0 0 4px;">GPU 오프로딩 레이어 (0=CPU)</div>
+            <input type="number" id="cfgNgl" min="0" max="99" />
+          </div>
+          <div style="flex:1; min-width:140px;">
+            <div class="hint" style="margin:0 0 4px;">스레드 수 (0=자동)</div>
+            <input type="number" id="cfgThreads" min="0" max="64" />
+          </div>
+          <div style="flex:1; min-width:140px;">
+            <div class="hint" style="margin:0 0 4px;">컨텍스트 길이</div>
+            <input type="number" id="cfgCtx" min="2048" step="1024" />
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px;">
+          <button class="btn mint" id="btnSaveEngine">저장 후 서버 재시작</button>
+          <span class="hint" style="margin:0;">저장하면 다음 요청부터 새 설정으로 서버가 다시 뜹니다</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div id="toast"></div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+  const PAGE_TITLES = { home: "홈", library: "라이브러리", chats: "대화 기록", settings: "설정" };
+
+  let entries = [];         // cache-list 결과
+  let selPath = null;       // 라이브러리 선택 파일
+  let paused = false;
+  let doneStamps = [];      // ETA: 최근 완료 시각들
+  let toastTimer = null;
+
+  function toast(msg) {
+    const t = $("toast");
+    t.textContent = msg; t.style.display = "block";
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => (t.style.display = "none"), 2200);
+  }
+
+  /* ================= 내비게이션 ================= */
+  function nav(page) {
+    document.querySelectorAll(".navbtn").forEach((b) =>
+      b.classList.toggle("on", b.dataset.page === page));
+    document.querySelectorAll("section.page").forEach((s) =>
+      s.classList.toggle("on", s.id === "page-" + page));
+    $("pageTitle").textContent = PAGE_TITLES[page] || page;
+    if (page === "home") { refreshStats(); refreshUsage(); }
+    if (page === "chats") { renderChats(); refreshUsage(); }
+    if (page === "settings") loadSettings();
+  }
+  document.querySelectorAll(".navbtn").forEach((b) => {
+    if (!b.dataset.page) return; // 별도 창 버튼(회의록)은 아래에서 바인딩
+    b.addEventListener("click", () => nav(b.dataset.page));
+  });
+  $("navMeeting").addEventListener("click", () => window.leva.openMeeting());
+  window.leva.onConsoleNav((sec) => nav(sec));
+  nav((location.hash || "#home").slice(1) || "home");
+
+  /* ================= 엔진 상태 ================= */
+  const fmtGB = (b) => (b == null ? "" : (b / 1073741824).toFixed(1) + " GB");
+  async function refreshEngine() {
+    let e = null;
+    try {
+      const r = await window.leva.engineStatus();
+      if (r && r.ok) e = r.engine;
+    } catch (err) {}
+    const dot = (on) => on ? "var(--ok)" : "var(--tx3)";
+    if (!e) {
+      $("tsEngine").innerHTML = '<span class="live-dot" style="background:var(--bad)"></span>워커 연결 안 됨';
+      $("tsRam").textContent = "";
+      ["engMainState", "engEmbedState", "engVisState"].forEach((id) => {
+        $(id).textContent = "확인 불가"; $(id).style.color = "var(--tx3)";
+      });
+      return;
+    }
+    const m = e.main, em = e.embed;
+    $("engMainPort").textContent = m.port;
+    $("engMainName").textContent = m.textModel || "모델 미설정";
+    if (m.alive && m.loaded === "text") {
+      $("engMainState").innerHTML = "● 로드됨" + (m.rss ? " · " + fmtGB(m.rss) : "");
+      $("engMainState").style.color = "var(--ok)";
+    } else if (m.alive && m.loaded === "vision") {
+      $("engMainState").innerHTML = "● 비전으로 스왑됨";
+      $("engMainState").style.color = "var(--info)";
+    } else {
+      $("engMainState").textContent = "◌ 대기 (첫 요청 시 기동)";
+      $("engMainState").style.color = "var(--tx3)";
+    }
+    $("engEmbedPort").textContent = em.port;
+    $("engEmbedName").textContent = em.model || "미설정";
+    if (!em.configured) {
+      $("engEmbedState").textContent = "설정 안 됨 — 의미검색 비활성";
+      $("engEmbedState").style.color = "var(--warn)";
+    } else if (em.alive) {
+      $("engEmbedState").innerHTML = "● 온라인" + (em.rss ? " · " + fmtGB(em.rss) : "");
+      $("engEmbedState").style.color = "var(--ok)";
+    } else {
+      $("engEmbedState").textContent = "◌ 대기 (첫 요청 시 기동)";
+      $("engEmbedState").style.color = "var(--tx3)";
+    }
+    $("engVisName").textContent = m.visionModel || "미설정";
+    if (m.loaded === "vision" && m.alive) {
+      $("engVisState").textContent = "● 로드됨"; $("engVisState").style.color = "var(--ok)";
+    } else {
+      $("engVisState").textContent = m.visionModel ? "◌ 스왑 대기" : "설정 안 됨";
+      $("engVisState").style.color = m.visionModel ? "var(--tx3)" : "var(--warn)";
+    }
+    const w = e.whisper || {};
+    $("engWspPort").textContent = w.port || "-";
+    $("engWspName").textContent = w.model || "미설치";
+    if (!w.configured) {
+      $("engWspState").textContent = "설정 안 됨 — 회의 녹음 전사 비활성";
+      $("engWspState").style.color = "var(--warn)";
+    } else if (w.alive) {
+      $("engWspState").textContent = "● 온라인";
+      $("engWspState").style.color = "var(--ok)";
+    } else {
+      $("engWspState").textContent = "◌ 대기 (첫 전사 시 기동)";
+      $("engWspState").style.color = "var(--tx3)";
+    }
+    const anyOn = m.alive || em.alive;
+    const ram = (m.rss || 0) + (em.rss || 0);
+    $("tsEngine").innerHTML = '<span class="live-dot" style="background:' + dot(anyOn) + '"></span>' +
+      (anyOn ? "엔진 온라인" : "엔진 대기");
+    $("tsRam").textContent = ram ? "RAM " + fmtGB(ram) : "";
+    if (typeof e.paused === "boolean" && e.paused !== paused) setPausedUi(e.paused);
+  }
+  $("btnRestartMain").addEventListener("click", async () => {
+    if (!confirm("대화/비전 서버를 재시작할까요? 진행 중인 응답이 끊길 수 있습니다.")) return;
+    await window.leva.engineRestart("main").catch(() => {});
+    toast("대화 서버를 내렸습니다 — 다음 요청 시 다시 뜹니다");
+    refreshEngine();
+  });
+  $("btnRestartEmbed").addEventListener("click", async () => {
+    await window.leva.engineRestart("embed").catch(() => {});
+    toast("임베딩 서버를 내렸습니다 — 다음 요청 시 다시 뜹니다");
+    refreshEngine();
+  });
+  $("btnRestartWsp").addEventListener("click", async () => {
+    await window.leva.engineRestart("whisper").catch(() => {});
+    toast("음성 인식 서버를 내렸습니다 — 다음 전사 시 다시 뜹니다");
+    refreshEngine();
+  });
+
+  /* ================= 캐싱 파이프라인 ================= */
+  const STAGE_LABEL = { 1: "본문 준비", 2: "임베딩", 3: "키워드·요약" };
+  function pipeCounts() {
+    const c = { wait: 0, s1: 0, s2: 0, done: 0, fail: 0, total: entries.length };
+    for (const e of entries) {
+      if (e.status === "CACHED") c.done++;
+      else if (e.status === "FAILED") c.fail++;
+      else if ((e.stage | 0) >= 2) c.s2++;
+      else if ((e.stage | 0) === 1) c.s1++;
+      else c.wait++;
+    }
+    return c;
+  }
+  function etaText(remain) {
+    if (!remain || doneStamps.length < 3) return "";
+    const xs = doneStamps.slice(-10);
+    const avg = (xs[xs.length - 1] - xs[0]) / (xs.length - 1);
+    if (avg <= 0) return "";
+    const sec = Math.round((avg * remain) / 1000);
+    if (sec < 60) return " · 남은 시간 약 " + sec + "초";
+    if (sec < 3600) return " · 남은 시간 약 " + Math.round(sec / 60) + "분";
+    return " · 남은 시간 약 " + (sec / 3600).toFixed(1) + "시간";
+  }
+  function renderPipeline() {
+    const c = pipeCounts();
+    const pct = c.total ? Math.round((c.done / c.total) * 100) : 0;
+    $("pipeBar").style.width = pct + "%";
+    const remain = c.total - c.done - c.fail;
+    $("pipeSummary").textContent = c.total
+      ? c.total + "개 중 " + c.done + "개 완료 (" + pct + "%)" + (paused ? " · 일시정지됨" : etaText(remain))
+      : "감시 폴더에 파일이 없습니다";
+    const chips = [];
+    if (c.wait) chips.push('<span class="chip gray">대기 ' + c.wait + "</span>");
+    if (c.s1) chips.push('<span class="chip warn">본문 준비 ' + c.s1 + "</span>");
+    if (c.s2) chips.push('<span class="chip info">임베딩/분석 ' + c.s2 + "</span>");
+    chips.push('<span class="chip ok">완료 ' + c.done + "</span>");
+    if (c.fail) chips.push('<span class="chip bad">실패 ' + c.fail + "</span>");
+    $("stageChips").innerHTML = chips.join("");
+    renderFailures();
+    renderRecent();
+  }
+  function renderFailures() {
+    const fails = entries.filter((e) => e.status === "FAILED");
+    $("failCard").style.display = fails.length ? "block" : "none";
+    $("failCount").textContent = fails.length;
+    $("failList").innerHTML = fails.slice(0, 30).map((e) =>
+      '<div class="frow" data-path="' + esc(e.path) + '">' +
+      '<span class="dot st-FAILED"></span>' +
+      '<span class="nm">' + esc(e.filename) + "</span>" +
+      '<span class="chip bad" title="' + esc(e.error_msg || "") + '">' +
+      esc((e.error_msg || "원인 미상").slice(0, 60)) + "</span>" +
+      '<button class="btn mint retry" data-path="' + esc(e.path) + '" style="flex:none;">재시도</button>' +
+      "</div>").join("");
+    $("failList").querySelectorAll(".retry").forEach((b) =>
+      b.addEventListener("click", async (ev) => {
+        ev.stopPropagation();
+        b.disabled = true; b.textContent = "재시도 중…";
+        window.leva.cacheRetry(b.dataset.path).catch(() => {});
+        toast("재캐싱을 큐에 넣었습니다");
+        setTimeout(refreshList, 1200);
+      }));
+    $("failList").querySelectorAll(".frow").forEach((r) =>
+      r.addEventListener("click", () => { nav("library"); selectFile(r.dataset.path); }));
+  }
+  function renderRecent() {
+    const done = entries.filter((e) => e.status === "CACHED").slice(0, 8);
+    $("recentList").innerHTML = done.length ? done.map((e) =>
+      '<div class="frow" data-path="' + esc(e.path) + '">' +
+      '<span class="dot st-CACHED"></span>' +
+      '<span class="nm">' + esc(e.filename) + "</span>" +
+      '<span class="meta">' + esc((e.summary || "").slice(0, 46)) + "</span>" +
+      "</div>").join("") : '<div class="empty">아직 없습니다</div>';
+    $("recentList").querySelectorAll(".frow").forEach((r) =>
+      r.addEventListener("click", () => { nav("library"); selectFile(r.dataset.path); }));
+  }
+
+  function setPausedUi(p) {
+    paused = p;
+    $("btnPause").textContent = p ? "▶ 재개" : "⏸ 일시정지";
+    renderPipeline();
+  }
+  $("btnPause").addEventListener("click", async () => {
+    if (paused) { await window.leva.cacheResume().catch(() => {}); setPausedUi(false); toast("캐싱을 재개합니다"); }
+    else { await window.leva.cachePause().catch(() => {}); setPausedUi(true); toast("파일/조각 경계에서 일시정지합니다"); }
+  });
+  $("btnRescan").addEventListener("click", async () => {
+    toast("전체 폴더를 다시 스캔합니다");
+    window.leva.cacheRescan().catch(() => {});
+    setTimeout(refreshList, 1500);
+  });
+  $("btnClearDb").addEventListener("click", async () => {
+    if (!confirm("캐시 DB를 초기화하고 처음부터 다시 캐싱할까요?")) return;
+    const r = await window.leva.clearCacheDb().catch(() => null);
+    toast(r && r.ok ? "초기화 완료 — 재캐싱을 시작합니다" : "초기화 실패");
+    doneStamps = [];
+    setTimeout(refreshList, 1200);
+  });
+
+  /* ---- 현재 파일(이벤트 기반) ---- */
+  function showCurrent(ev) {
+    const el = $("curFile");
+    if (!ev) { el.style.display = "none"; return; }
+    el.style.display = "flex";
+    $("curName").textContent = ev.filename || "";
+    let step = ev.step || (STAGE_LABEL[ev.stage] || "처리 중");
+    if (ev.qtotal) step += " · 큐 " + ev.qindex + "/" + ev.qtotal;
+    $("curStep").textContent = (ev.stage ? ev.stage + "단계 · " : "") + step;
+    const dots = $("curDots").children;
+    for (let i = 0; i < 3; i++) {
+      dots[i].className = "";
+      const st = ev.stage | 0;
+      if (i + 1 < st) dots[i].className = "done";
+      else if (i + 1 === st) dots[i].className = "cur";
+    }
+  }
+
+  /* ================= 목록/라이브러리 ================= */
+  async function refreshList() {
+    const list = await window.leva.cacheList().catch(() => null);
+    if (Array.isArray(list)) entries = list;
+    renderPipeline();
+    renderLibrary();
+    renderKwExplorer();
+    if (selPath) fillDetail(entries.find((e) => e.path === selPath));
+  }
+  function libItems() {
+    const q = $("libSearch").value.trim().toLowerCase();
+    const f = $("libFilter").value;
+    return entries.filter((e) => {
+      if (f && e.status !== f) return false;
+      if (!q) return true;
+      const hay = (e.filename + " " + (e.keywords || []).join(" ") + " " + (e.summary || "")).toLowerCase();
+      return hay.includes(q);
+    });
+  }
+  function renderLibrary() {
+    const items = libItems();
+    $("libList").innerHTML = items.length ? items.map((e) =>
+      '<div class="frow' + (e.path === selPath ? " sel" : "") + '" data-path="' + esc(e.path) + '">' +
+      '<span class="dot st-' + esc(e.status) + '"></span>' +
+      '<span class="nm">' + esc(e.filename) + "</span>" +
+      '<span class="meta">' + (e.chunks ? e.chunks + "청크" : "") +
+      (e.status === "PENDING" ? " · " + (STAGE_LABEL[e.stage] || "대기") : "") + "</span>" +
+      "</div>").join("") : '<div class="empty">조건에 맞는 파일이 없습니다</div>';
+    $("libList").querySelectorAll(".frow").forEach((r) =>
+      r.addEventListener("click", () => selectFile(r.dataset.path)));
+  }
+  function selectFile(path) {
+    selPath = path;
+    renderLibrary();
+    fillDetail(entries.find((e) => e.path === path));
+  }
+  function fillDetail(e) {
+    const d = $("detail");
+    if (!e) { d.style.display = "none"; return; }
+    d.style.display = "block";
+    $("dtName").textContent = e.filename;
+    const st = e.status === "CACHED" ? '<span class="chip ok">완료</span>'
+      : e.status === "FAILED"
+        ? '<span class="chip bad">실패</span> <span style="color:var(--bad); font-size:11.5px;">' + esc(e.error_msg || "") + "</span>"
+        : '<span class="chip warn">' + esc(STAGE_LABEL[e.stage] || "대기") + " 중</span>";
+    $("dtState").innerHTML = st;
+    $("dtSummary").textContent = e.summary || "(3단계 완료 후 생성됩니다)";
+    $("dtKeywords").innerHTML = (e.keywords || []).map((k) =>
+      '<span class="chip mint">' + esc(k) + "</span>").join("") || '<span style="color:var(--tx3)">-</span>';
+    $("dtChunks").textContent = e.chunks
+      ? e.chunks + "개 — 의미검색 가능"
+      : "0개 — 아직 검색 불가(임베딩 전)";
+    $("dtPath").textContent = e.path;
+    $("dtOpen").onclick = () => window.leva.openViewer(e.path);
+    $("dtRecache").onclick = () => {
+      window.leva.cacheRetry(e.path).catch(() => {});
+      toast("다시 캐싱을 큐에 넣었습니다 (요약·키워드 재생성)");
+    };
+  }
+  $("libSearch").addEventListener("input", renderLibrary);
+  $("libFilter").addEventListener("change", renderLibrary);
+
+  /* ---- 검색 테스트 ---- */
+  async function runSearchTest() {
+    const q = $("stQuery").value.trim();
+    if (!q) return;
+    $("stResults").innerHTML = '<div class="empty">검색 중…</div>';
+    const r = await window.leva.searchTest(q).catch((e) => ({ ok: false, error: String(e) }));
+    const hits = (r && r.ok && r.hits) || [];
+    if (!hits.length) {
+      $("stResults").innerHTML = '<div class="empty">' +
+        (r && r.error ? "실패: " + esc(r.error) : "매칭된 청크가 없습니다 (임베딩 여부·최소 점수 확인)") + "</div>";
+      return;
+    }
+    $("stResults").innerHTML = hits.map((h) =>
+      '<div style="border:1px solid var(--line2); border-radius:8px; padding:8px 10px; margin-bottom:7px;">' +
+      '<div class="row"><span class="nm" style="font-size:12px;">' + esc(h.filename) + "</span>" +
+      '<span class="chip mint" style="margin-left:auto;">score ' + (h.score != null ? Number(h.score).toFixed(3) : "-") +
+      (h.chunk_index != null ? " · #" + h.chunk_index : "") + "</span></div>" +
+      (h.snippet ? '<div style="font-size:11.5px; color:var(--tx3); margin-top:4px;">' + esc(h.snippet.slice(0, 160)) + "…</div>" : "") +
+      "</div>").join("");
+  }
+  $("stRun").addEventListener("click", runSearchTest);
+  $("stQuery").addEventListener("keydown", (e) => { if (e.key === "Enter") runSearchTest(); });
+
+  /* ================= 대화 기록 ================= */
+  async function renderChats() {
+    const log = await window.leva.getChatLog().catch(() => []);
+    const items = (log || []).slice().reverse();
+    $("chatCount").textContent = items.length ? "총 " + items.length + "개 대화" : "";
+    $("chatList").innerHTML = items.length ? items.map((c) => {
+      const refs = (c.refs || []).map((r) => {
+        const label = esc(r.filename) +
+          (r.score != null ? " · 매칭 " + Number(r.score).toFixed(2) : "") +
+          (r.chunk_index != null ? " · 청크 #" + r.chunk_index : "") +
+          (r.mode === "global" ? " · 전역 요약" : "");
+        return '<span class="chip mint clickable" data-path="' + esc(r.path || "") +
+          '" data-snip="' + esc((r.snippet || "").slice(0, 120)) +
+          '" title="' + esc(r.snippet || "") + '">📎 ' + label + "</span>";
+      }).join("");
+      return '<div class="qa">' +
+        '<div class="q"><b>Q</b>' + esc(c.question) + "</div>" +
+        '<div class="a">' + esc(c.answer) + "</div>" +
+        (refs ? '<div class="refs">' + refs + "</div>" : "") +
+        '<div class="t">' + new Date(c.ts).toLocaleString("ko-KR") + "</div>" +
+        "</div>";
+    }).join("") : '<div class="empty">대화 기록이 없습니다</div>';
+    $("chatList").querySelectorAll(".chip.clickable").forEach((ch) =>
+      ch.addEventListener("click", () => {
+        // 발췌를 함께 넘겨 뷰어가 해당 대목을 하이라이트+스크롤
+        if (ch.dataset.path) window.leva.openViewer(ch.dataset.path, ch.dataset.snip || "");
+      }));
+  }
+  $("btnClearChat").addEventListener("click", async () => {
+    if (!confirm("대화 기록을 모두 삭제할까요? (대화 맥락도 초기화됩니다)")) return;
+    await window.leva.clearChatLog().catch(() => {});
+    renderChats();
+  });
+
+  /* ---- 콘솔에서 직접 질문 (스트리밍) ---- */
+  let chatPending = null; // 스트리밍 중인 답변 영역
+  async function sendConsoleChat() {
+    const q = $("chatInput").value.trim();
+    if (!q || chatPending) return;
+    $("chatInput").value = "";
+    $("chatSend").disabled = true;
+    const div = document.createElement("div");
+    div.className = "qa";
+    div.innerHTML = '<div class="q"><b>Q</b>' + esc(q) + '</div><div class="a">생각 중…</div>';
+    const list = $("chatList");
+    if (list.firstChild && list.firstChild.className === "empty") list.innerHTML = "";
+    list.prepend(div);
+    chatPending = div.querySelector(".a");
+    try { await window.leva.ask(q); } catch (e) {}
+    chatPending = null;
+    $("chatSend").disabled = false;
+    renderChats(); // 근거 칩 포함 최종본으로 교체
+    $("chatInput").focus();
+  }
+  window.leva.onChatChunk((p) => {
+    if (!chatPending || !p || !p.delta) return;
+    if (chatPending.textContent === "생각 중…") chatPending.textContent = "";
+    chatPending.textContent += p.delta;
+  });
+  $("chatSend").addEventListener("click", sendConsoleChat);
+  $("chatInput").addEventListener("keydown", (e) => { if (e.key === "Enter") sendConsoleChat(); });
+  window.leva.onChatLogged(() => {
+    if ($("page-chats").classList.contains("on")) renderChats();
+  });
+
+  /* ================= 설정 ================= */
+  let cfgCache = null;
+  async function loadSettings() {
+    cfgCache = await window.leva.getSettings().catch(() => ({}));
+    $("cfgTop").checked = !!cfgCache.alwaysOnTop;
+    $("cfgNotify").checked = !!cfgCache.notifyOnEvents;
+    $("cfgAutoCache").checked = !!cfgCache.enableCache;
+    $("cfgAutoStart").checked = !!cfgCache.autoStart;
+    $("cfgHotkey").value = cfgCache.hotkey || "";
+    $("cfgIgnore").value = (cfgCache.ignorePatterns || []).join(", ");
+    $("cfgNgl").value = cfgCache.nGpuLayers != null ? cfgCache.nGpuLayers : 0;
+    $("cfgThreads").value = cfgCache.nThreads != null ? cfgCache.nThreads : 0;
+    $("cfgCtx").value = cfgCache.nCtx != null ? cfgCache.nCtx : 8192;
+    renderFolders();
+    renderModels();
+  }
+  async function saveToggle(key, val) {
+    await window.leva.saveSettings({ [key]: val }).catch(() => {});
+    toast("저장됨");
+  }
+  $("cfgTop").addEventListener("change", (e) => saveToggle("alwaysOnTop", e.target.checked));
+  $("cfgNotify").addEventListener("change", (e) => saveToggle("notifyOnEvents", e.target.checked));
+  $("cfgAutoCache").addEventListener("change", (e) => saveToggle("enableCache", e.target.checked));
+  $("cfgAutoStart").addEventListener("change", (e) => saveToggle("autoStart", e.target.checked));
+  $("btnSaveHotkey").addEventListener("click", async () => {
+    await window.leva.saveSettings({ hotkey: $("cfgHotkey").value.trim() }).catch(() => {});
+    toast("단축키 저장됨");
+  });
+  $("btnSaveIgnore").addEventListener("click", async () => {
+    const patterns = $("cfgIgnore").value.split(",").map((s) => s.trim()).filter(Boolean);
+    await window.leva.saveSettings({ ignorePatterns: patterns }).catch(() => {});
+    await window.leva.observerSetIgnore(patterns).catch(() => {});
+    toast("제외 패턴 저장됨");
+  });
+  $("btnSaveEngine").addEventListener("click", async () => {
+    await window.leva.saveSettings({
+      nGpuLayers: Number($("cfgNgl").value) || 0,
+      nThreads: Number($("cfgThreads").value) || 0,
+      nCtx: Number($("cfgCtx").value) || 8192,
+    }).catch(() => {});
+    await window.leva.engineRestart("all").catch(() => {});
+    toast("저장됨 — 다음 요청부터 새 설정으로 기동합니다");
+    refreshEngine();
+  });
+
+  async function renderFolders() {
+    const list = await window.leva.observerList().catch(() => []);
+    $("folderList").innerHTML = (list && list.length) ? list.map((w) =>
+      '<div class="set-row"><div class="lbl"><div class="t1">' + esc(w.path) + "</div>" +
+      '<div class="t2">' + (w.recursive ? "하위 폴더 포함" : "이 폴더만") + "</div></div>" +
+      '<button class="btn danger rmf" data-id="' + esc(w.watchId || "") + '" data-path="' + esc(w.path) + '">삭제</button></div>'
+    ).join("") : '<div class="empty">감시 중인 폴더가 없습니다 — 폴더를 추가하면 자동 캐싱이 시작됩니다</div>';
+    $("folderList").querySelectorAll(".rmf").forEach((b) =>
+      b.addEventListener("click", async () => {
+        await window.leva.observerRemove(b.dataset.id, b.dataset.path).catch(() => {});
+        toast("폴더 감시 해제됨");
+        renderFolders();
+      }));
+  }
+  $("btnAddFolder").addEventListener("click", async () => {
+    const p = await window.leva.pickFolder().catch(() => null);
+    if (!p) return;
+    const r = await window.leva.observerAdd(p, true).catch(() => null);
+    toast(r && r.ok !== false ? "폴더 추가됨 — 캐싱을 시작합니다" : "추가 실패");
+    renderFolders();
+    setTimeout(refreshList, 1500);
+  });
+
+  async function renderModels() {
+    const models = await window.leva.hfListModels().catch(() => []);
+    if (!models || !models.length) {
+      $("modelList").innerHTML = '<div class="empty">모델 카탈로그를 불러오지 못했습니다</div>';
+      return;
+    }
+    $("modelList").innerHTML = models.map((m) =>
+      '<div class="mdl" id="mdl-' + esc(m.key) + '">' +
+      '<div class="info"><div class="n">' + esc(m.name) +
+      (m.downloaded ? ' <span class="chip ok">설치됨</span>' : "") + "</div>" +
+      '<div class="d">' + esc(m.desc || "") + "</div></div>" +
+      '<div class="prog"><div class="bar"><i style="width:0%"></i></div>' +
+      '<div class="hint" style="margin-top:3px;"></div></div>' +
+      (m.downloaded
+        ? ""
+        : '<button class="btn mint dlm" data-key="' + esc(m.key) + '">받기</button>') +
+      "</div>").join("");
+    $("modelList").querySelectorAll(".dlm").forEach((b) =>
+      b.addEventListener("click", () => {
+        b.disabled = true; b.textContent = "다운로드 중…";
+        const box = $("mdl-" + b.dataset.key);
+        if (box) box.querySelector(".prog").style.display = "block";
+        window.leva.hfDownloadModel(b.dataset.key)
+          .then((r) => {
+            toast(r && r.ok ? "다운로드 완료 — 자동 연결됨" : "다운로드 실패" + (r && r.message ? ": " + r.message : ""));
+            renderModels();
+          })
+          .catch(() => { toast("다운로드 실패"); renderModels(); });
+      }));
+  }
+  $("btnWhisperSetup").addEventListener("click", async () => {
+    const b = $("btnWhisperSetup");
+    b.disabled = true; b.textContent = "설치 중…";
+    const r = await window.leva.whisperSetup().catch((e) => ({ ok: false, error: String(e) }));
+    b.disabled = false; b.textContent = "엔진 설치";
+    $("wsSetupHint").textContent = r && r.ok
+      ? "설치됨 — 오디오 파일이 자동으로 전사됩니다 (모델도 아래에서 받아 주세요)"
+      : "설치 실패: " + ((r && r.error) || "알 수 없음");
+    if (r && r.ok) { toast("whisper.cpp 설치 완료"); refreshEngine(); }
+  });
+
+  window.leva.onHfProgress((p) => {
+    if (p.key === "whisperSetup") {
+      const pct = Math.round(p.percent || 0);
+      $("wsSetupHint").textContent = p.done ? "설치됨" : "다운로드 중… " + pct + "%";
+      return;
+    }
+    const box = $("mdl-" + p.key);
+    if (!box) return;
+    const prog = box.querySelector(".prog");
+    prog.style.display = "block";
+    const pct = Math.round(p.percent || 0);
+    prog.querySelector(".bar > i").style.width = pct + "%";
+    const spd = p.speed ? (p.speed / 1048576).toFixed(1) + " MB/s" : "";
+    prog.querySelector(".hint").textContent = pct + "%" + (spd ? " · " + spd : "");
+    if (p.done) renderModels();
+  });
+
+  /* ================= 대시보드 통계 ================= */
+  const EXT_COLORS = ["#45D6B8", "#5BA8F5", "#F2B04B", "#C792EA", "#F26D6D", "#7BC96F", "#6B7690"];
+  const fmtBytes = (b) => {
+    if (!b) return "0";
+    if (b >= 1073741824) return (b / 1073741824).toFixed(1) + " GB";
+    if (b >= 1048576) return (b / 1048576).toFixed(1) + " MB";
+    return Math.round(b / 1024) + " KB";
+  };
+  const fmtN = (n) => Number(n || 0).toLocaleString("ko-KR");
+
+  async function refreshStats() {
+    const s = await window.leva.cacheStats().catch(() => null);
+    if (!s || !s.ok) return;
+    const total = (s.total && s.total.n) || 0;
+    $("kbCoverage").textContent = total ? Math.round((s.searchable / total) * 100) + "%" : "-";
+    $("kbFiles").textContent = fmtN(total);
+    $("kbChunks").textContent = fmtN(s.chunks && s.chunks.n);
+    $("kbSize").textContent = fmtBytes(s.dbBytes);
+    // 형식별 분포 바 + 범례 (상위 6 + 기타)
+    const exts = (s.byExt || []).slice();
+    const top = exts.slice(0, 6);
+    const rest = exts.slice(6).reduce((a, x) => a + x.n, 0);
+    if (rest) top.push({ ext: "기타", n: rest });
+    const sum = top.reduce((a, x) => a + x.n, 0) || 1;
+    $("kbExtBar").innerHTML = top.map((x, i) =>
+      '<i style="width:' + ((x.n / sum) * 100) + "%; background:" + EXT_COLORS[i % EXT_COLORS.length] + '"></i>').join("");
+    $("kbExtLegend").innerHTML = top.map((x, i) =>
+      '<span><b style="color:' + EXT_COLORS[i % EXT_COLORS.length] + '">●</b> ' +
+      esc(x.ext || "?") + " <b>" + fmtN(x.n) + "</b></span>").join("");
+    // 관리 카드
+    const stale = s.stale || [], dups = s.dups || [], ft = s.failTypes || [];
+    $("mgmtCard").style.display = (stale.length || dups.length || ft.length) ? "block" : "none";
+    $("mgmtStale").style.display = stale.length ? "block" : "none";
+    if (stale.length) {
+      $("staleCount").textContent = "오래된 캐시 " + stale.length + "개";
+      $("staleList").innerHTML = stale.slice(0, 20).map((x) => esc(x.filename)).join(" · ");
+      $("btnRecacheStale").onclick = () => {
+        stale.forEach((x) => window.leva.cacheRetry(x.path).catch(() => {}));
+        toast(stale.length + "개 파일 재캐싱을 큐에 넣었습니다");
+        setTimeout(refreshList, 1500);
+      };
+    }
+    $("mgmtDups").style.display = dups.length ? "block" : "none";
+    if (dups.length) {
+      $("dupCount").textContent = "중복 " + dups.length + "그룹";
+      $("dupList").innerHTML = dups.slice(0, 8).map((d) =>
+        '<div style="margin-bottom:5px;">' +
+        d.paths.split("\n").map((p) => esc(p)).join('<span style="color:var(--tx3)"> = </span>') +
+        "</div>").join("");
+    }
+    $("mgmtFails").style.display = ft.length ? "block" : "none";
+    if (ft.length) {
+      $("failTypeList").innerHTML = ft.map((f) =>
+        '<div>' + esc(f.msg) + ' <b style="color:var(--bad)">' + f.n + "건</b></div>").join("");
+    }
+  }
+
+  async function refreshUsage() {
+    const u = await window.leva.usageStats().catch(() => null);
+    if (!u || !u.ok) return;
+    // 홈 성능 카드
+    $("pfTtft").textContent = u.perfSamples ? (u.avgTtftMs >= 1000
+      ? (u.avgTtftMs / 1000).toFixed(1) + "초" : u.avgTtftMs + "ms") : "-";
+    $("pfCps").textContent = u.perfSamples ? fmtN(u.avgCps) : "-";
+    $("pfChats").textContent = fmtN(u.totalChats);
+    $("pfNote").textContent = u.perfSamples ? "" : "새 대화부터 측정됩니다";
+    // 대화 기록 탭 활용 통계
+    $("usageCards").style.display = u.totalChats ? "grid" : "none";
+    $("topRefs").innerHTML = (u.topRefs && u.topRefs.length)
+      ? u.topRefs.map((r) =>
+        '<div class="row" style="padding:3px 0;"><span class="nm" style="font-size:12px;">' +
+        esc(r.filename) + '</span><span class="chip mint" style="margin-left:auto;">' + r.n + "회</span></div>").join("")
+      : '<div class="empty" style="padding:6px;">아직 참조 데이터가 없습니다</div>';
+    const mx = Math.max(1, ...u.daily.map((d) => d.n));
+    $("dailyBars").innerHTML = u.daily.map((d) =>
+      '<div class="mb" title="' + d.day + ": " + d.n + '건"><i style="height:' +
+      Math.round((d.n / mx) * 34 + 2) + 'px"></i><span>' + d.day.slice(3) + "</span></div>").join("");
+    const pct = u.totalChats ? Math.round((u.noRefCount / u.totalChats) * 100) : 0;
+    $("noRefPct").textContent = pct + "%";
+    $("noRefList").innerHTML = (u.noRefRecent && u.noRefRecent.length)
+      ? u.noRefRecent.map((x) => '<div style="padding:2px 0;">· ' + esc(x.question.slice(0, 60)) + "</div>").join("")
+      : '<div style="color:var(--tx3)">없음 — 모든 답변에 근거가 있었습니다</div>';
+  }
+
+  /* ================= 키워드 탐색기 ================= */
+  const kwSel = new Set();
+  function kwMatchedFiles() {
+    return entries.filter((e) => (e.keywords || []).some((k) => kwSel.has(k)));
+  }
+  function renderKwExplorer() {
+    const counts = {};
+    for (const e of entries)
+      for (const k of (e.keywords || [])) counts[k] = (counts[k] || 0) + 1;
+    const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 60);
+    if (!top.length) return; // 초기 안내 문구 유지
+    $("kwCloud").innerHTML = top.map(([k, n]) =>
+      '<span class="chip gray kwchip' + (kwSel.has(k) ? " on" : "") + '" data-kw="' + esc(k) + '">' +
+      esc(k) + '<span class="n">' + n + "</span></span>").join("");
+    $("kwCloud").querySelectorAll(".kwchip").forEach((c) =>
+      c.addEventListener("click", () => {
+        const k = c.dataset.kw;
+        kwSel.has(k) ? kwSel.delete(k) : kwSel.add(k);
+        renderKwExplorer();
+      }));
+    const files = kwSel.size ? kwMatchedFiles() : [];
+    $("kwActions").style.display = kwSel.size ? "block" : "none";
+    if (kwSel.size) {
+      $("kwCount").textContent = "선택 키워드 " + kwSel.size + "개 → 파일 " + files.length + "개 매칭";
+      $("kwFiles").innerHTML = files.map((f) =>
+        '<div class="frow" data-path="' + esc(f.path) + '" style="padding:4px 8px;">' +
+        '<span class="dot st-' + esc(f.status) + '"></span><span class="nm">' + esc(f.filename) + "</span></div>").join("");
+      $("kwFiles").querySelectorAll(".frow").forEach((r) =>
+        r.addEventListener("click", () => selectFile(r.dataset.path)));
+      $("kwUncache").onclick = async () => {
+        if (!files.length || !confirm(files.length + "개 파일을 캐시에서 제거할까요?\n(실제 파일은 그대로, 검색 대상에서만 빠집니다)")) return;
+        const r = await window.leva.uncacheFiles(files.map((f) => f.path)).catch(() => null);
+        toast((r && r.done || 0) + "개 캐시에서 제거됨");
+        kwSel.clear();
+        refreshList();
+      };
+      $("kwTrash").onclick = async () => {
+        if (!files.length || !confirm(files.length + "개 파일을 휴지통으로 이동할까요?\n(휴지통에서 복구할 수 있습니다)")) return;
+        const r = await window.leva.trashFiles(files.map((f) => f.path)).catch(() => null);
+        toast(r ? r.done + "개 휴지통으로 이동" + (r.failed && r.failed.length ? " · 실패 " + r.failed.length : "") : "실패");
+        kwSel.clear();
+        refreshList();
+      };
+    }
+  }
+
+  /* ================= 실시간 이벤트 ================= */
+  let refreshTimer = null;
+  function scheduleRefresh(ms = 700) {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(refreshList, ms);
+  }
+  window.leva.onCacheEvent((ev) => {
+    if (!ev || !ev.phase) return;
+    if (ev.phase === "paused") { setPausedUi(true); return; }
+    if (ev.phase === "resumed") { setPausedUi(false); return; }
+    if (ev.phase === "start" || ev.phase === "progress") { showCurrent(ev); return; }
+    if (ev.phase === "embedded") { showCurrent({ ...ev, step: "임베딩 완료 (" + (ev.chunks || 0) + "청크)" }); scheduleRefresh(); return; }
+    if (ev.phase === "done") { doneStamps.push(Date.now()); showCurrent(null); scheduleRefresh(); return; }
+    if (ev.phase === "error") { showCurrent(null); scheduleRefresh(); return; }
+    if (ev.phase === "discovered") { scheduleRefresh(200); return; }
+    scheduleRefresh();
+  });
+
+  /* ================= 초기화 ================= */
+  refreshList();
+  refreshEngine();
+  refreshStats();
+  refreshUsage();
+  setInterval(refreshEngine, 5000);
+  setInterval(refreshList, 30000); // 이벤트 유실 대비 폴백
+  setInterval(() => { refreshStats(); refreshUsage(); }, 60000);
+</script>
+</body>
+</html>

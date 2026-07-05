@@ -3,6 +3,8 @@ import os
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff"}
 PDF_EXTS = {".pdf"}
+# 음성/녹음 — whisper.cpp로 전사 후 텍스트 파이프라인으로 흘림
+AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".webm", ".aac", ".wma"}
 # 텍스트로 추출 가능한 문서 + 소스코드
 TEXT_EXTS = {".txt", ".md", ".log", ".csv", ".json", ".xml", ".html", ".htm",
              ".docx", ".xlsx", ".pptx", ".hwp", ".rtf",
@@ -14,6 +16,7 @@ TEXT_EXTS = {".txt", ".md", ".log", ".csv", ".json", ".xml", ".html", ".htm",
 
 VISION = "vision"   # MiniCPM-V
 TEXT = "text"       # Gemma
+AUDIO = "audio"     # Whisper (전사 → 이후 단계는 text와 동일)
 
 
 # 항상 무시하는 시스템/임시 파일(하드코딩 차단)
@@ -33,6 +36,8 @@ def route(path):
         return None, ext
     if ext in PDF_EXTS or ext in IMAGE_EXTS:
         return VISION, ext
+    if ext in AUDIO_EXTS:
+        return AUDIO, ext
     if ext in TEXT_EXTS:
         return TEXT, ext
     return None, ext

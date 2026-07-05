@@ -114,6 +114,8 @@ function toggleInput(force) {
 }
 
 orb.addEventListener("click", () => toggleInput());
+// 글로벌 단축키(Alt+Space)·트레이 메뉴 → 입력창 열기
+window.leva.onFocusInput(() => toggleInput(true));
 
 // ---- 마크다운/LaTeX 정리 (작은 말풍선용 일반 텍스트로) ---------------
 function sanitizeMd(t) {
@@ -178,8 +180,9 @@ function renderLinkified(bubble, text, fileMap) {
 // ---- 스트리밍 응답 말풍선 --------------------------------------------
 let streamBubble = null;
 let streamRaw = "";
+let hudAwaiting = false; // HUD가 보낸 질문 대기 중일 때만 스트림 표시(콘솔 발신 무시)
 window.leva.onChatChunk((p) => {
-  if (!p || !p.delta) return;
+  if (!p || !p.delta || !hudAwaiting) return;
   if (!streamBubble) {
     clearTyping();
     streamBubble = addBubble("", "ai", false); // 생성 중엔 자동으로 안 사라짐
@@ -198,6 +201,7 @@ async function send() {
   orb.classList.add("thinking");
   streamBubble = null;
   streamRaw = "";
+  hudAwaiting = true;
   showTyping();
   try {
     const answer = await window.leva.ask(text);
@@ -220,6 +224,7 @@ async function send() {
     else addBubble("오류가 발생했어요: " + e.message, "ai");
   } finally {
     streamBubble = null;
+    hudAwaiting = false;
     orb.classList.remove("thinking");
   }
 }
@@ -263,6 +268,7 @@ menu.addEventListener("click", (e) => {
   const action = item.dataset.action;
   closeMenu();
   if (action === "chat") toggleInput(true);
+  else if (action === "meeting") window.leva.openMeeting();
   else if (action === "dashboard") window.leva.openDashboard();
   else if (action === "settings") window.leva.openSettings();
   else if (action === "quit") window.leva.quit();

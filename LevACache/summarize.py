@@ -102,20 +102,43 @@ def parse_result(raw):
 # ============================================================
 
 PROMPT_ITER = (
-    "당신은 문서 색인 비서입니다. 긴 문서를 여러 조각으로 나눠 순서대로 읽고 있습니다.\n"
+    "당신은 문서 색인 비서입니다. 긴 문서 '{name}' 전체에서 균등하게 발췌한 "
+    "조각들을 순서대로 읽고 있습니다(조각 사이 내용은 생략돼 있음).\n"
     "지금까지 정리한 키워드: {prev}\n"
-    "아래는 문서 '{name}' 의 {i}/{n} 번째 조각입니다. 이 조각의 내용을 반영해 "
+    "아래는 {i}/{n} 번째 조각입니다. 이 조각의 내용을 반영해 "
     "키워드 목록을 갱신하세요(기존 키워드는 유지하고, 새로 필요한 것을 추가·보완). "
-    "그리고 지금까지 읽은 내용을 바탕으로 한두 문장 요약을 갱신하세요.\n"
+    "그리고 지금까지 읽은 내용 전체를 아우르는 요약을 갱신하세요"
+    "({summary_len}. 인물·사건·주제 등 핵심을 담을 것).\n"
     "JSON으로만 답하세요. 형식: {{\"keywords\": [\"...\", \"...\"], \"summary\": \"...\"}}\n"
     "키워드는 개수 제한 없이 한국어로. 다른 말은 하지 마세요.\n\n"
     "[조각 {i}/{n}]\n{body}"
 )
 
 
-def build_iter_prompt(name, prev_keywords, body, i, n):
+PROMPT_ITER_MEETING = (
+    "당신은 회의록 작성 비서입니다. 회의 녹음의 전사본(타임스탬프 포함) "
+    "'{name}' 을 여러 조각으로 나눠 순서대로 읽고 있습니다.\n"
+    "지금까지 정리한 키워드: {prev}\n"
+    "아래는 {i}/{n} 번째 조각입니다. 키워드 목록을 갱신하고"
+    "(참석자·프로젝트명·핵심 주제 위주), 지금까지 내용 전체를 아우르는 "
+    "회의 요약을 갱신하세요. 요약에 반드시 담을 것: ①주요 안건 ②결정사항 "
+    "③액션아이템(담당자·기한이 언급됐으면 함께) ④미결 이슈. "
+    "전사에 없는 내용은 절대 지어내지 마세요.\n"
+    "JSON으로만 답하세요. 형식: {{\"keywords\": [\"...\", \"...\"], \"summary\": \"...\"}}\n"
+    "키워드는 한국어로. 다른 말은 하지 마세요.\n\n"
+    "[조각 {i}/{n}]\n{body}"
+)
+
+
+def build_iter_prompt(name, prev_keywords, body, i, n, mode="doc"):
     prev = ", ".join(prev_keywords) if prev_keywords else "(아직 없음)"
-    return PROMPT_ITER.format(prev=prev, name=name, i=i, n=n, body=body or "(빈 조각)")
+    if mode == "meeting":
+        return PROMPT_ITER_MEETING.format(prev=prev, name=name, i=i, n=n,
+                                          body=body or "(빈 조각)")
+    # 조각이 여럿인 긴 문서는 한두 문장으로는 전체를 담을 수 없다
+    summary_len = "4~6문장" if n > 1 else "한두 문장"
+    return PROMPT_ITER.format(prev=prev, name=name, i=i, n=n,
+                              summary_len=summary_len, body=body or "(빈 조각)")
 
 
 def split_body(body, size):
@@ -126,6 +149,23 @@ def split_body(body, size):
     if size <= 0 or len(body) <= size:
         return [body]
     return [body[i:i + size] for i in range(0, len(body), size)]
+
+
+def sample_chunks(chunks, max_parts):
+    """조각이 max_parts를 넘으면 문서 전체에서 균등 간격으로 뽑는다.
+
+    종전의 chunks[:max_parts]는 긴 문서(소설 등)의 앞부분만 읽어
+    '도입부 요약'이 전체 요약으로 저장되는 문제가 있었다.
+    첫 조각과 마지막 조각은 항상 포함한다(도입·결말).
+    """
+    n = len(chunks)
+    if n <= max_parts:
+        return chunks
+    if max_parts <= 1:
+        return chunks[:1]
+    step = (n - 1) / (max_parts - 1)
+    idxs = sorted({round(i * step) for i in range(max_parts)})
+    return [chunks[i] for i in idxs]
 
 
 def merge_keywords(prev, new):
@@ -140,20 +180,22 @@ def merge_keywords(prev, new):
     return out
 
 
-def run_text_extraction(chat, name, body, *, chunk_size=2000, max_parts=12, on_progress=None):
+def run_text_extraction(chat, name, body, *, chunk_size=2000, max_parts=12,
+                        on_progress=None, mode="doc"):
     """본문을 조각내어 반복 추출. chat(prompt)->str 호출.
     반환: (keywords, summary). 조각이 1개면 사실상 단일 호출과 동일.
+    mode="meeting" 이면 회의록(안건·결정·액션아이템) 중심으로 정리한다.
     """
     chunks = split_body(body, chunk_size)
     if not chunks:
         return [], ""
-    chunks = chunks[:max_parts]
+    chunks = sample_chunks(chunks, max_parts)  # 앞부분만이 아니라 전체 균등 발췌
     n = len(chunks)
     keywords, summary = [], ""
     for idx, chunk in enumerate(chunks, 1):
         if on_progress:
             on_progress(idx, n)
-        raw = chat(build_iter_prompt(name, keywords, chunk, idx, n))
+        raw = chat(build_iter_prompt(name, keywords, chunk, idx, n, mode=mode))
         kws, s = parse_result(raw)
         keywords = merge_keywords(keywords, kws)
         if s:

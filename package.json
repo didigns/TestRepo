@@ -14,7 +14,8 @@
   "license": "MIT",
   "dependencies": {
     "adm-zip": "^0.5.16",
-    "exceljs": "^4.4.0"
+    "exceljs": "^4.4.0",
+    "pdfjs-dist": "^6.1.200"
   },
   "devDependencies": {
     "electron": "^43.0.0",
@@ -46,7 +47,9 @@
       {
         "from": "pybin",
         "to": "pybin",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {

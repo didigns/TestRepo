@@ -148,6 +148,14 @@ class Pipeline:
                 c.ensure_vision()
                 body = c.ocr(prep["images"], fname) or ""
                 c.set_ocr_text(path, body)
+        elif prep["kind"] == "audio":
+            # 전사도 OCR과 동일하게 재사용(해시 같으면 재전사 안 함)
+            body = c.get_ocr_text(path) or ""
+            if not body:
+                self._emit(phase="progress", path=path, filename=fname,
+                           step="음성 전사 중 (Whisper)", stage=STAGE_PREPARE)
+                body = c.transcribe(path) or ""
+                c.set_ocr_text(path, body)
         else:
             body = prep.get("text", "") or ""
         return READY, body

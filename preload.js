@@ -15,6 +15,18 @@ contextBridge.exposeInMainWorld("leva", {
   openDashboard: () => ipcRenderer.send("open-dashboard"),
   closeDashboard: () => ipcRenderer.send("close-dashboard"),
 
+  // 회의록 창 — 녹음 저장·PDF 내보내기
+  openMeeting: () => ipcRenderer.send("open-meeting"),
+  saveRecording: (buf, title) => ipcRenderer.invoke("save-recording", buf, title),
+  listRecordings: () => ipcRenderer.invoke("list-recordings"),
+  liveTranscribe: (wavBuf) => ipcRenderer.invoke("live-transcribe", wavBuf),
+  // 스트리밍 라이브 자막(faster-whisper)
+  liveStart: () => ipcRenderer.invoke("live-start"),
+  liveStop: () => ipcRenderer.invoke("live-stop"),
+  liveAudio: (buf) => ipcRenderer.send("live-audio", buf),
+  onLiveText: (cb) => ipcRenderer.on("live-text", (_e, payload) => cb(payload)),
+  exportMeetingPdf: (payload) => ipcRenderer.invoke("export-meeting-pdf", payload),
+
   // llama.cpp 준비(자동 설치)
   onLlamaSetupProgress: (cb) => ipcRenderer.on("llama-setup-progress", (_e, p) => cb(p)),
   retryLlamaSetup: () => ipcRenderer.invoke("llama-setup-retry"),
@@ -25,7 +37,7 @@ contextBridge.exposeInMainWorld("leva", {
   onChatLogged: (cb) => ipcRenderer.on("chat-logged", () => cb()),
 
   // 파일 뷰어
-  openViewer: (p) => ipcRenderer.send("open-viewer", p),
+  openViewer: (p, highlight) => ipcRenderer.send("open-viewer", p, highlight || ""),
   getViewerFile: () => ipcRenderer.invoke("viewer-file"),
   fileInfo: (p) => ipcRenderer.invoke("file-info", p),
   readFile: (p) => ipcRenderer.invoke("read-file", p),
@@ -49,8 +61,27 @@ contextBridge.exposeInMainWorld("leva", {
   cacheStatus: () => ipcRenderer.invoke("cache-status"),
   cacheList: () => ipcRenderer.invoke("cache-list"),
   cacheFile: (path) => ipcRenderer.invoke("cache-file", path),
+  cacheRetry: (path) => ipcRenderer.invoke("cache-retry", path),
+  cachePause: () => ipcRenderer.invoke("cache-pause"),
+  cacheResume: () => ipcRenderer.invoke("cache-resume"),
   cacheRescan: () => ipcRenderer.invoke("cache-rescan"),
   clearCacheDb: () => ipcRenderer.invoke("cache-clear-db"),
+
+  // 엔진(llama-server) 상태·재시작 / 검색 테스트
+  engineStatus: () => ipcRenderer.invoke("engine-status"),
+  engineRestart: (target) => ipcRenderer.invoke("engine-restart", target),
+  searchTest: (query) => ipcRenderer.invoke("search-test", query),
+  extractText: (p) => ipcRenderer.invoke("extract-text", p), // 뷰어 하이라이트용 본문
+  readBin: (p) => ipcRenderer.invoke("read-bin", p), // PDF 바이너리(pdf.js 렌더링용)
+
+  // 대시보드 통계 / 키워드 탐색기
+  cacheStats: () => ipcRenderer.invoke("cache-stats"),
+  usageStats: () => ipcRenderer.invoke("usage-stats"),
+  trashFiles: (paths) => ipcRenderer.invoke("trash-files", paths),
+  uncacheFiles: (paths) => ipcRenderer.invoke("uncache-files", paths),
+  onConsoleNav: (cb) => ipcRenderer.on("console-nav", (_e, section) => cb(section)),
+
+  whisperSetup: () => ipcRenderer.invoke("whisper-setup"), // whisper.cpp(STT) 설치
 
   // Hugging Face 모델 다운로드 (모델 카탈로그 기반)
   hfListModels: () => ipcRenderer.invoke("hf-list-models"),
@@ -61,4 +92,5 @@ contextBridge.exposeInMainWorld("leva", {
   // 이벤트 수신 (HUD 말풍선용)
   onFsEvent: (cb) => ipcRenderer.on("fs-event", (_e, payload) => cb(payload)),
   onCacheEvent: (cb) => ipcRenderer.on("cache-event", (_e, payload) => cb(payload)),
+  onFocusInput: (cb) => ipcRenderer.on("focus-input", () => cb()), // 글로벌 단축키 → HUD 입력
 });
