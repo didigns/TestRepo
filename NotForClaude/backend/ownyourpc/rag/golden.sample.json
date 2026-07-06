@@ -1,0 +1,17 @@
+[
+  {
+    "question": "계약 만료일은 언제인가요?",
+    "expected_terms": ["만료", "날짜"],
+    "should_refuse": false
+  },
+  {
+    "question": "위약금 조항이 있나요?",
+    "expected_terms": ["위약금"],
+    "should_refuse": false
+  },
+  {
+    "question": "이 문서와 전혀 무관한 화성 기지 건설 예산은?",
+    "expected_terms": [],
+    "should_refuse": true
+  }
+]

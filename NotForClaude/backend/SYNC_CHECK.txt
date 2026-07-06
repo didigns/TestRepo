@@ -1,0 +1,3 @@
+canary-line-1
+canary-line-2
+canary-line-3-END

@@ -204,3 +204,4 @@ leva-chatlog.json
 # llamacpp 는 실행 시 GitHub 릴리스에서 자동 다운로드하므로 git에서 제외한다.
 # (대용량 바이너리를 리포에 안 올려 100MB 제한/LFS 없이 푸시 가능)
 llamacpp/
+NotForClaude/desktop/src-tauri/target

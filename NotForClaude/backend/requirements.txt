@@ -1,0 +1,45 @@
+# --- core service ---
+fastapi>=0.111
+uvicorn[standard]>=0.30
+pydantic>=2.7
+requests>=2.32
+psutil>=5.9
+
+# --- vector store ---
+lancedb>=0.13
+pyarrow>=16.0
+
+# --- document parsing ---
+pymupdf>=1.24          # PDF
+python-docx>=1.1       # Word
+python-pptx>=0.6       # PowerPoint
+trafilatura>=1.9       # HTML -> clean text
+olefile>=0.47          # HWP v5 (PrvText fallback)
+gethwp>=0.2            # HWP/HWPX 한글 문서 텍스트 추출 (hwpx는 없어도 내장 파서로 동작)
+watchdog>=4.0          # folder watching
+
+# --- meetings ---
+faster-whisper>=1.0    # STT (CTranslate2)
+reportlab>=4.2         # PDF minutes
+xhtml2pdf>=0.2.16      # HTML 회의록 템플릿 -> PDF (한국어 CID 폰트)
+sounddevice>=0.4       # microphone capture (live meetings)
+soundcard>=0.4         # system-audio loopback capture (solo testing)
+numpy>=1.26            # audio buffers
+# --- speaker diarization (optional, 회의 종료 후 화자 분리) ---
+sherpa-onnx>=1.10      # ONNX 화자 분리 (torch 불필요, HF 토큰 불필요)
+#   pip install sherpa-onnx
+#   모델(pyannote segmentation + 3D-Speaker embedding, 공개)은 첫 실행 시 자동 다운로드
+
+# --- dev / review gate ---
+pytest>=8.2
+pip-audit>=2.7
+
+# --- local LLM backend (default: in-process GGUF, no daemon) ---
+llama-cpp-python>=0.3      # in-process GGUF inference (no Ollama needed)
+huggingface_hub>=0.24      # downloads GGUF models
+
+# 기본 백엔드는 llama-cpp-python(인프로세스). 'python -m ownyourpc.cli pull'이
+# unsloth/gemma-4-E4B-it-GGUF + nomic-embed-text-v1.5-GGUF 를 자동 다운로드.
+#
+# (선택) Ollama 백엔드를 쓰려면 config.json에서 "backend": "ollama" 로 바꾸고:
+#   ollama pull gemma4:e4b && ollama pull nomic-embed-text
