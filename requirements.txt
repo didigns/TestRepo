@@ -13,3 +13,8 @@ olefile>=0.47         # .hwp 본문 추출 (HWP 5.0 복합문서)
 
 # 실시간 자막(선택 — 없으면 문장 단위 VAD 방식으로 자동 폴백)
 faster-whisper>=1.0.0   # 스트리밍 라이브 전사 (CTranslate2)
+
+# GPU(CUDA 12) 런타임 — faster-whisper를 GPU로 돌릴 때 필요
+# 없으면 "cublas64_12.dll is not found" 오류 발생. CPU만 쓰면 생략 가능.
+nvidia-cublas-cu12>=12.1.0    # cublas64_12.dll 제공
+nvidia-cudnn-cu12>=9.1.0      # cudnn DLL 제공 (CTranslate2 GPU 의존성)
