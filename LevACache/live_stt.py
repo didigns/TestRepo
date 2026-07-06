@@ -10,14 +10,53 @@ whisper.cpp(HTTP 배치)와 별개의 선택적 백엔드다:
   타임스탬프와 함께 확정하고 버퍼를 비운다.
 지연 체감: GPU ≈ 1초 안팎, CPU(int8) ≈ 2~4초.
 """
+import os
 import threading
 import time
+
+
+def _add_cuda_dll_dirs(log=None):
+    """pip로 설치한 nvidia-cublas-cu12 / nvidia-cudnn-cu12 의 DLL 폴더를
+    Windows DLL 검색 경로에 등록한다.
+
+    Windows는 site-packages\\nvidia\\*\\bin 을 자동으로 찾지 않기 때문에,
+    이 처리를 하지 않으면 CTranslate2가 'cublas64_12.dll is not found' 오류를 낸다.
+    비Windows/미설치 환경에서는 조용히 무시(CPU 폴백은 그대로 동작)."""
+    if os.name != "nt":
+        return
+    added = []
+    try:
+        import importlib.util
+        for pkg in ("nvidia.cublas", "nvidia.cudnn"):
+            try:
+                spec = importlib.util.find_spec(pkg)
+            except Exception:
+                spec = None
+            if not spec or not spec.submodule_search_locations:
+                continue
+            for base in spec.submodule_search_locations:
+                bin_dir = os.path.join(base, "bin")
+                if os.path.isdir(bin_dir):
+                    try:
+                        os.add_dll_directory(bin_dir)  # Python 3.8+
+                    except Exception:
+                        pass
+                    # PATH 폴백(일부 로더는 add_dll_directory를 못 탐)
+                    os.environ["PATH"] = bin_dir + os.pathsep + os.environ.get("PATH", "")
+                    added.append(bin_dir)
+    except Exception as e:
+        if log:
+            log("CUDA DLL 경로 등록 실패(무시): " + str(e))
+    if added and log:
+        log("CUDA DLL 경로 등록: " + ", ".join(added))
 
 
 class LiveSTT:
     SR = 16000
 
     def __init__(self, cfg, emit, log):
+        # 모델 로드 전에 cuBLAS/cuDNN DLL 폴더를 검색 경로에 등록
+        _add_cuda_dll_dirs(log)
         # 의존성 없으면 여기서 ImportError → 호출부가 폴백 처리
         from faster_whisper import WhisperModel
 
