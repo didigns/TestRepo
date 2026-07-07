@@ -204,4 +204,13 @@ leva-chatlog.json
 # llamacpp 는 실행 시 GitHub 릴리스에서 자동 다운로드하므로 git에서 제외한다.
 # (대용량 바이너리를 리포에 안 올려 100MB 제한/LFS 없이 푸시 가능)
 llamacpp/
-NotForClaude/desktop/src-tauri/target
+NotForClaude/desktop/src-tauri/target/
+
+# ----- 데스크톱 인스톨러/런처 빌드 산출물 (prepare-runtime.ps1 / build-all.ps1) -----
+# 번들 Python 런타임: standalone CPython + 백엔드 deps, ~1GB (빌드 시 재생성)
+NotForClaude/desktop/runtime/
+# 인스톨러 패키징 산출물(setup.exe) + 임시 빌드 폴더(_build_*)
+NotForClaude/desktop/dist/
+# 파이썬 컴파일 캐시(런처/인스톨러)
+NotForClaude/desktop/launcher/__pycache__/
+NotForClaude/desktop/installer/__pycache__/

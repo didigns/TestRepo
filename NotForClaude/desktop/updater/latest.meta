@@ -1,0 +1,12 @@
+{
+  "version": "0.2.0",
+  "pub_date": "2026-07-08T00:00:00Z",
+  "notes": "OwnYourPC 0.2.0 — 자동 업데이터 도입. 앱 시작 시 Drive .meta를 확인해 새 버전 알림.",
+  "mandatory": false,
+  "installer": {
+    "filename": "OwnYourPC_0.2.0_x64-setup.exe",
+    "url": "https://drive.google.com/file/d/PUT_INSTALLER_FILE_ID_HERE/view?usp=drive_link",
+    "size": 0,
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  }
+}

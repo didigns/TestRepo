@@ -226,6 +226,36 @@
     .thread{padding:32px 64px;} .composer{padding:18px 64px;}
     .turn{max-width:900px;} .cbox{max-width:900px;} .msg{font-size:15px;}
   }
+  /* first-run onboarding wizard */
+  .ob-mask{position:fixed;inset:0;z-index:400;background:rgba(8,12,20,.55);display:none;align-items:center;justify-content:center;}
+  .ob-mask.show{display:flex;}
+  .ob{width:560px;max-width:94vw;max-height:88vh;background:var(--panel);border:.5px solid var(--border);border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.35);overflow:hidden;display:flex;flex-direction:column;}
+  .ob-head{padding:22px 26px 0;}
+  .ob-steps{display:flex;gap:6px;margin-top:16px;}
+  .ob-steps i{flex:1;height:4px;border-radius:3px;background:var(--border);transition:background .3s;}
+  .ob-steps i.on{background:var(--accent);}
+  .ob-body{padding:18px 26px;overflow:auto;}
+  .ob h2{margin:0;font-size:19px;}
+  .ob .sub{color:var(--text2);font-size:12.5px;margin-top:8px;line-height:1.65;}
+  .ob-foot{display:flex;gap:8px;justify-content:flex-end;padding:15px 26px;border-top:.5px solid var(--border);background:var(--panel2);}
+  .ob-btn{border:.5px solid var(--border);border-radius:9px;padding:9px 18px;font-size:13px;cursor:pointer;background:var(--panel);color:var(--text);}
+  .ob-btn:hover{background:var(--panel2);}
+  .ob-btn.pri{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .ob-btn:disabled{opacity:.5;cursor:default;}
+  .ob-tier{display:flex;flex-direction:column;gap:8px;margin-top:14px;}
+  .ob-tier label{display:flex;gap:10px;align-items:flex-start;border:.5px solid var(--border);border-radius:10px;padding:11px 13px;cursor:pointer;}
+  .ob-tier label.sel{border-color:var(--accent);background:var(--accent-bg);}
+  .ob-tier b{font-size:13px;} .ob-tier .d{font-size:11.5px;color:var(--text2);margin-top:2px;}
+  .ob-hw{font-size:12px;color:var(--text2);background:var(--panel2);border-radius:9px;padding:10px 12px;margin-top:12px;}
+  .ob-m{margin-top:14px;}
+  .ob-m .row{display:flex;align-items:center;gap:10px;margin:10px 0;}
+  .ob-m .nm{font-size:12.5px;min-width:130px;}
+  .ob-bar{flex:1;height:8px;border-radius:5px;background:var(--panel2);overflow:hidden;}
+  .ob-bar > i{display:block;height:100%;width:0;background:var(--accent);border-radius:5px;transition:width .35s ease;}
+  .ob-bar.ind > i{width:100%;animation:obpulse 1.2s infinite ease-in-out;}
+  @keyframes obpulse{0%,100%{opacity:.22}50%{opacity:.7}}
+  .ob-pct{font-size:11px;color:var(--text2);min-width:44px;text-align:right;}
+  .ob-pct.ob-ok{color:var(--ok);}
 </style>
 </head>
 <body>
@@ -406,6 +436,22 @@
 
     </div>
     <div class="scard-f"><button class="tinybtn" onclick="closeSettings()">닫기</button></div>
+  </div>
+</div>
+
+<!-- first-run onboarding wizard -->
+<div class="ob-mask" id="ob">
+  <div class="ob">
+    <div class="ob-head">
+      <div class="brand" style="margin:0;"><div class="logo">O</div><b>OwnYourPC 시작하기</b></div>
+      <div class="ob-steps" id="obSteps"></div>
+    </div>
+    <div class="ob-body" id="obBody"></div>
+    <div class="ob-foot">
+      <button class="ob-btn" id="obSkip" onclick="obClose(true)">나중에</button>
+      <button class="ob-btn" id="obBack" onclick="obPrev()" style="display:none;">뒤로</button>
+      <button class="ob-btn pri" id="obNext" onclick="obNext()">다음</button>
+    </div>
   </div>
 </div>
 
@@ -745,15 +791,17 @@ function renderModels(data){
       </div>`).join('')+`</div>`).join('');
 }
 async function pullModel(key,btn){
-  btn.disabled=true; btn.textContent='다운로드 중…';
+  btn.disabled=true; btn.textContent='0%';
   await api('/models/pull',{method:'POST',body:JSON.stringify({key})});
   const poll=setInterval(async()=>{
     try{
-      const st=(await (await api('/models/pull-status')).json())[key];
-      if(st==='done'){ clearInterval(poll); loadModels(); }
-      else if(st&&st.indexOf('error')===0){ clearInterval(poll); btn.disabled=false; btn.textContent='재시도'; }
+      const s=(await (await api('/models/pull-status')).json())[key]||{};
+      if(s.state==='done'){ clearInterval(poll); loadModels(); }
+      else if(s.state==='error'){ clearInterval(poll); btn.disabled=false; btn.textContent='재시도'; }
+      else if(typeof s.pct==='number' && s.pct>=0){ btn.textContent=s.pct+'%'; }
+      else { btn.textContent='다운로드 중…'; }
     }catch(e){}
-  },2500);
+  },1000);
 }
 
 // ---- meeting ----
@@ -943,6 +991,114 @@ async function deleteMeeting(id,title){
     if(meetingId===id) newMeeting(); loadMeetings(); }catch(e){}
 }
 
+// ===== first-run onboarding wizard =====
+let OB={step:0,tier:'mid',hw:null,hwRec:null,models:[],reqKeys:[]};
+const OB_STEPS=['환영','사양·티어','필수 모델','문서 폴더','회의 모델','완료'];
+
+async function checkOnboarding(){
+  const force=location.hash.indexOf('onboard')>=0;   // #onboard forces preview
+  if(!force && sessionStorage.getItem('oyp-ob-skip')==='1') return;
+  try{
+    const [mv,sv]=await Promise.all([
+      api('/models').then(r=>r.json()),
+      api('/settings').then(r=>r.json())]);
+    OB.models=mv.items||[]; OB.tier=sv.tier||'mid';
+    const need=obReqKeys(OB.tier).filter(k=>!obInstalled(k));
+    if(!force && !need.length) return;     // models present -> skip wizard
+    OB.step=0; el('ob').classList.add('show'); obRender();
+  }catch(e){}
+}
+function obReqKeys(t){ return ['llm:'+t,'embed']; }
+function obInstalled(k){ const it=OB.models.find(m=>m.key===k); return it?!!it.installed:false; }
+function obClose(skip){ el('ob').classList.remove('show'); if(skip) sessionStorage.setItem('oyp-ob-skip','1'); loadKB(); }
+
+function obRender(){
+  const s=OB.step;
+  el('obSteps').innerHTML=OB_STEPS.map((_,i)=>`<i class="${i<=s?'on':''}"></i>`).join('');
+  el('obBack').style.display=(s>0&&s<5)?'inline-block':'none';
+  el('obSkip').style.display=(s<5)?'inline-block':'none';
+  const nx=el('obNext'); nx.disabled=false;
+  const b=el('obBody');
+  if(s===0){ b.innerHTML=`<h2>OwnYourPC에 오신 걸 환영합니다</h2><div class="sub">100% 로컬로 문서 질의응답과 회의 전사·요약을 제공합니다. 클라우드 전송 없이 이 PC 안에서만 동작해요.<br><br>시작 전에 사양에 맞는 설정과 필요한 AI 모델을 준비하겠습니다.</div>`; nx.textContent='시작'; }
+  else if(s===1){ b.innerHTML=obTierHtml(); nx.textContent='다음'; }
+  else if(s===2){ b.innerHTML=obModelsHtml(); nx.textContent='다운로드 시작'; }
+  else if(s===3){ b.innerHTML=obFolderHtml(); nx.textContent='다음'; }
+  else if(s===4){ b.innerHTML=obMeetHtml(); nx.textContent='다음'; }
+  else { b.innerHTML=`<h2>준비 완료 🎉</h2><div class="sub">이제 왼쪽에서 폴더를 추가하고 질문하거나, 상단에서 회의를 시작할 수 있어요. 설정(⚙)에서 언제든 모델·티어를 바꿀 수 있습니다.</div>`; nx.textContent='완료'; }
+}
+async function obLoadHw(){
+  try{ const hw=await (await api('/hardware')).json();
+    OB.hw=hw.hardware; OB.hwRec=hw.recommended_tier; if(hw.recommended_tier) OB.tier=hw.recommended_tier;
+  }catch(e){}
+}
+function obTierHtml(){
+  const T={low:['저사양','E2B · 12GB RAM 이하 노트북, 가장 빠름'],mid:['기본','E4B · 16GB RAM 권장, 균형'],high:['고사양','E4B Q6 · 24GB+ RAM/GPU, 최고 품질']};
+  const rows=Object.entries(T).map(([k,v])=>
+    `<label class="${k===OB.tier?'sel':''}" onclick="obPickTier('${k}',this)">
+      <input type="radio" name="obtier" ${k===OB.tier?'checked':''} style="margin-top:2px;">
+      <span><b>${v[0]} · ${k}</b><div class="d">${v[1]}</div></span></label>`).join('');
+  const hw=OB.hw?`감지: RAM ${OB.hw.ram_gb}GB · ${OB.hw.gpu.vendor==='none'?'GPU 없음':esc(OB.hw.gpu.name)} · 추천 <b>${esc(OB.hwRec||'mid')}</b>`:'하드웨어 감지 중…';
+  return `<h2>사양에 맞는 설정</h2><div class="sub">감지한 하드웨어에 맞춰 티어를 추천했어요. 바꿔도 됩니다.</div><div class="ob-hw">${hw}</div><div class="ob-tier">${rows}</div>`;
+}
+function obPickTier(k,lab){ OB.tier=k; document.querySelectorAll('.ob-tier label').forEach(l=>l.classList.remove('sel')); lab.classList.add('sel'); const r=lab.querySelector('input'); if(r)r.checked=true; }
+function obModelsHtml(){
+  OB.reqKeys=obReqKeys(OB.tier);
+  const rows=OB.reqKeys.map(k=>{ const it=OB.models.find(m=>m.key===k)||{name:k};
+    return `<div class="row"><span class="nm">${esc(it.name||k)}</span><span class="ob-bar" id="obbar-${esc(k)}"><i></i></span><span class="ob-pct" id="obpct-${esc(k)}">${obInstalled(k)?'✓':'대기'}</span></div>`;}).join('');
+  return `<h2>필수 모델 설치</h2><div class="sub">질의응답에 필요한 언어 모델(Gemma)과 임베딩 모델을 받습니다. 네트워크 상태에 따라 수 분 걸릴 수 있어요.</div><div class="ob-m">${rows}</div>`;
+}
+function obUpdBar(k,s){
+  const bar=el('obbar-'+k),pct=el('obpct-'+k); if(!bar)return; const fill=bar.querySelector('i');
+  if(s.state==='done'){ bar.classList.remove('ind'); fill.style.opacity='1'; fill.style.width='100%'; pct.textContent='✓'; pct.className='ob-pct ob-ok'; return; }
+  if(s.state==='error'){ bar.classList.remove('ind'); pct.textContent='오류'; return; }
+  if(typeof s.pct==='number' && s.pct>=0){
+    bar.classList.remove('ind'); fill.style.opacity='1';
+    const v=Math.max(+bar.dataset.pct||0, s.pct);   // monotonic: never go backwards
+    bar.dataset.pct=v; fill.style.width=v+'%'; pct.textContent=v+'%';
+  } else { bar.classList.add('ind'); pct.textContent='…'; }
+}
+function obDownloadModels(){
+  const keys=OB.reqKeys.filter(k=>!obInstalled(k));
+  if(!keys.length) return Promise.resolve(true);
+  el('obNext').disabled=true; el('obBack').style.display='none'; el('obSkip').style.display='none';
+  keys.forEach(k=>api('/models/pull',{method:'POST',body:JSON.stringify({key:k})}));
+  return new Promise(res=>{ const poll=setInterval(async()=>{
+    let all=true,err=false;
+    try{ const st=await (await api('/models/pull-status')).json();
+      keys.forEach(k=>{ const s=st[k]||{}; obUpdBar(k,s); if(s.state!=='done')all=false; if(s.state==='error')err=true; });
+    }catch(e){ all=false; }
+    if(err){ clearInterval(poll); res(false); }
+    else if(all){ clearInterval(poll); keys.forEach(k=>{const it=OB.models.find(m=>m.key===k); if(it)it.installed=true;}); res(true); }
+  },700); });
+}
+function obFolderHtml(){
+  return `<h2>문서 폴더 지정 <span style="font-size:12px;color:var(--text2);">(선택)</span></h2><div class="sub">질문할 문서가 담긴 폴더를 고르면 자동으로 색인합니다. 나중에 왼쪽 '폴더 추가'로도 할 수 있어요.</div><div class="ob-m"><button class="ob-btn" onclick="obPickFolder()">📁 폴더 선택…</button> <span id="obFolderMsg" style="font-size:12px;color:var(--text2);margin-left:8px;"></span></div>`;
+}
+async function obPickFolder(){
+  try{ const r=await api('/pick-folder',{method:'POST'}); const p=r.ok?(await r.json()).path:null; if(!p)return;
+    el('obFolderMsg').textContent='색인 중… '+p;
+    await api('/ingest/scan',{method:'POST',body:JSON.stringify({folder:p})});
+    el('obFolderMsg').textContent='✓ 색인 완료'; loadKB();
+  }catch(e){ el('obFolderMsg').textContent='건너뜀'; }
+}
+function obMeetHtml(){
+  return `<h2>회의 기능 모델 <span style="font-size:12px;color:var(--text2);">(선택)</span></h2><div class="sub">실시간 회의 전사·요약을 쓰려면 음성인식(Whisper) 모델이 필요합니다. 지금 안 받아도 나중에 설정에서 받을 수 있어요.</div><div class="ob-tier"><label><input type="checkbox" id="obStt"> <span><b>음성인식 모델</b><div class="d">회의 전사용 Whisper (사양별 자동 선택)</div></span></label><label><input type="checkbox" id="obDiar"> <span><b>화자 분리</b><div class="d">회의에서 화자1·화자2 구분 (~90MB)</div></span></label></div>`;
+}
+async function obNext(){
+  const s=OB.step;
+  if(s===0){ OB.step=1; obRender(); if(!OB.hw){ await obLoadHw(); obRender(); } return; }
+  if(s===1){ await saveSetting({tier:OB.tier}); try{ OB.models=(await (await api('/models')).json()).items||[]; }catch(e){} OB.step=2; obRender(); return; }
+  if(s===2){ const ok=await obDownloadModels(); if(!ok){ el('obNext').disabled=false; el('obNext').textContent='재시도'; el('obSkip').style.display='inline-block'; return; } OB.step=3; obRender(); return; }
+  if(s===3){ OB.step=4; obRender(); return; }
+  if(s===4){ const keys=[]; const stt=OB.models.find(m=>m.group&&m.group.indexOf('STT')>=0);
+    if(el('obStt')&&el('obStt').checked&&stt) keys.push(stt.key);
+    if(el('obDiar')&&el('obDiar').checked) keys.push('diar');
+    keys.forEach(k=>api('/models/pull',{method:'POST',body:JSON.stringify({key:k})}));
+    OB.step=5; obRender(); return; }
+  obClose(false);
+}
+function obPrev(){ if(OB.step>0){ OB.step--; obRender(); } }
+
 try{ const _st=localStorage.getItem('oyp-theme'); if(_st) document.documentElement.setAttribute('data-theme',_st); }catch(e){}
 
 // server health / auto-reconnect: show a banner while the server is down,
@@ -960,6 +1116,7 @@ async function healthLoop(){
 }
 setInterval(healthLoop, 4000);
 loadKB();
+checkOnboarding();
 </script>
 </body>
 </html>

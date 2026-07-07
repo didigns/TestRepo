@@ -196,6 +196,11 @@ def get_settings(_=Depends(auth)):
 _PULL_STATUS: dict = {}
 
 
+def _set_pull(key, **kw):
+    """Merge progress fields into the per-key status dict."""
+    _PULL_STATUS.setdefault(key, {}).update(kw)
+
+
 @app.get("/models")
 def models_status(_=Depends(auth)):
     """Which LLM / embedding / STT models are downloaded on this machine."""
@@ -238,34 +243,75 @@ class PullReq(BaseModel):
     key: str
 
 
+def _hf_url(repo: str, fn: str) -> str:
+    from huggingface_hub import hf_hub_url
+    return hf_hub_url(repo_id=repo, filename=fn)
+
+
+def _download_gguf(repo: str, fn: str, key: str):
+    """Stream a GGUF into MODELS_CACHE reporting byte-level progress."""
+    import requests
+    from .config import MODELS_CACHE
+    MODELS_CACHE.mkdir(parents=True, exist_ok=True)
+    dest = MODELS_CACHE / fn
+    if dest.exists():
+        _set_pull(key, state="done", pct=100)
+        return
+    tmp = dest.with_suffix(dest.suffix + ".part")
+    with requests.get(_hf_url(repo, fn), stream=True, timeout=60) as r:
+        r.raise_for_status()
+        total = int(r.headers.get("Content-Length", 0) or 0)
+        done = 0
+        _set_pull(key, state="downloading", pct=0, downloaded=0, total=total)
+        with open(tmp, "wb") as f:
+            for chunk in r.iter_content(chunk_size=1 << 20):
+                if not chunk:
+                    continue
+                f.write(chunk)
+                done += len(chunk)
+                pct = int(done * 100 / total) if total else -1
+                _set_pull(key, state="downloading", pct=pct, downloaded=done, total=total)
+    tmp.replace(dest)
+    _set_pull(key, state="done", pct=100, downloaded=done, total=total)
+
+
 @app.post("/models/pull")
 def models_pull(req: PullReq, _=Depends(auth)):
-    """Download a model in the background; poll /models/pull-status."""
+    """Download a model in the background; poll /models/pull-status.
+
+    Status per key: {"state": downloading|done|error, "pct": 0-100 or -1
+    (indeterminate), "downloaded", "total", "error"}.
+    """
     import threading
     from .config import LLAMACPP_LLM, LLAMACPP_EMBED
     key = req.key
 
     def run():
-        _PULL_STATUS[key] = "downloading"
+        _set_pull(key, state="downloading", pct=-1, error="")
         try:
-            if key.startswith("stt:"):
-                from faster_whisper import WhisperModel
-                WhisperModel(key.split(":", 1)[1], device="cpu", compute_type="int8")
-            elif key.startswith("llm:"):
+            if key.startswith("llm:"):
                 repo, fn = LLAMACPP_LLM[key.split(":", 1)[1]]
-                _state["provider"]._resolve(repo, fn)
+                _download_gguf(repo, fn, key)
             elif key == "embed":
                 repo, fn, _d = LLAMACPP_EMBED
-                _state["provider"]._resolve(repo, fn)
+                _download_gguf(repo, fn, key)
+            elif key.startswith("stt:"):
+                # faster-whisper pulls a multi-file repo; show indeterminate.
+                from faster_whisper import WhisperModel
+                WhisperModel(key.split(":", 1)[1], device="cpu", compute_type="int8")
+                _set_pull(key, state="done", pct=100)
             elif key.startswith("ollama:"):
                 import subprocess
                 subprocess.run(["ollama", "pull", key.split(":", 1)[1]], check=False)
+                _set_pull(key, state="done", pct=100)
             elif key == "diar":
                 from .meetings import diarize as _diar
                 _diar.ensure_models()
-            _PULL_STATUS[key] = "done"
+                _set_pull(key, state="done", pct=100)
+            else:
+                _set_pull(key, state="done", pct=100)
         except Exception as e:
-            _PULL_STATUS[key] = f"error: {e}"[:120]
+            _set_pull(key, state="error", pct=-1, error=str(e)[:160])
 
     threading.Thread(target=run, daemon=True).start()
     return {"ok": True}
