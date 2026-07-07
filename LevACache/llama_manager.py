@@ -64,7 +64,76 @@ class LlamaManager:
         except Exception:
             return 0
 
+    @staticmethod
+    def _total_ram_gb():
+        """물리 RAM 총량(GB). 구하지 못하면 None."""
+        try:
+            if os.name == "nt":
+                import ctypes
+                from ctypes import wintypes
+
+                class _MS(ctypes.Structure):
+                    _fields_ = [
+                        ("dwLength", wintypes.DWORD),
+                        ("dwMemoryLoad", wintypes.DWORD),
+                        ("ullTotalPhys", ctypes.c_uint64),
+                        ("ullAvailPhys", ctypes.c_uint64),
+                        ("ullTotalPageFile", ctypes.c_uint64),
+                        ("ullAvailPageFile", ctypes.c_uint64),
+                        ("ullTotalVirtual", ctypes.c_uint64),
+                        ("ullAvailVirtual", ctypes.c_uint64),
+                        ("ullAvailExtendedVirtual", ctypes.c_uint64),
+                    ]
+
+                ms = _MS()
+                ms.dwLength = ctypes.sizeof(_MS)
+                if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(ms)):
+                    return ms.ullTotalPhys / (1024 ** 3)
+            else:
+                return (os.sysconf("SC_PAGE_SIZE")
+                        * os.sysconf("SC_PHYS_PAGES")) / (1024 ** 3)
+        except Exception:
+            return None
+        return None
+
+    def _use_mlock(self):
+        """mlock 사용 여부. 설정이 True라도 물리 RAM이 부족(<24GB)하면 끈다.
+
+        mlock은 가중치를 RAM에 고정해 콜드 페이지폴트를 없애지만, 저사양에서
+        여러 서버(메인+임베딩+whisper+faster-whisper)가 동시에 고정하면 OS가
+        메모리를 회수하지 못해 하드 OOM(크래시)으로 이어진다. 넉넉한 RAM에서만 켠다."""
+        if self.cfg.get("lowMemory"):
+            return False  # 저메모리 모드: OS 페이지 회수 허용(가중치 고정 해제)
+        if not self.cfg.get("useMlock", True):
+            return False
+        gb = self._total_ram_gb()
+        if gb is not None and gb < 24:
+            self._log(f"mlock 비활성(물리 RAM {gb:.0f}GB < 24GB) — 저사양 OOM 방지")
+            return False
+        return True
+
+    def _unified_vision(self):
+        """텍스트 모델(Gemma 4)이 곧 비전 모델인 '통합 멀티모달' 구성인지 판단.
+
+        visionModel 이 textModel 과 같은 파일이고 Gemma용 mmproj(visionMmproj)가
+        존재하면, MiniCPM 스왑 없이 하나의 llama-server 가 텍스트와 이미지를 모두
+        처리한다. (요청마다 모델을 재기동하던 스왑 비용·프로세스 churn 제거)"""
+        tm = self.cfg.get("textModel")
+        vm = self.cfg.get("visionModel")
+        mm = self.cfg.get("visionMmproj")
+        if not (tm and vm and mm):
+            return False
+        try:
+            same = (os.path.normcase(os.path.abspath(tm))
+                    == os.path.normcase(os.path.abspath(vm)))
+        except Exception:
+            same = (tm == vm)
+        return same and os.path.isfile(mm)
+
     def _model_args(self, key):
+        # 통합 멀티모달(Gemma 4 = 텍스트+비전): 키와 무관하게 한 서버로 처리.
+        if self._unified_vision():
+            return ["-m", self.cfg["textModel"], "--mmproj", self.cfg["visionMmproj"]]
         if key == "vision":
             model = self.cfg.get("visionModel")
             mmproj = self.cfg.get("visionMmproj")
@@ -85,6 +154,9 @@ class LlamaManager:
             return ["-m", model]
 
     def ensure_model(self, key):
+        # 통합 멀티모달이면 vision 요청도 하나의 text 서버가 처리 → 재기동(스왑) 없음
+        if self._unified_vision():
+            key = "text"
         if self.loaded_key == key and self._alive():
             return
         self._stop_main()  # 스왑: 메인 서버만 재기동(임베딩 서버는 유지)
@@ -102,7 +174,7 @@ class LlamaManager:
         fa = self.cfg.get("flashAttn", "auto")
         if fa:
             args += ["-fa", str(fa)]          # 어텐션 가속 + KV 메모리 절감
-        if self.cfg.get("useMlock", True):
+        if self._use_mlock():
             args += ["--mlock"]                # 가중치를 RAM에 상주(콜드 페이지폴트 제거)
         self._log(f"llama-server 기동: model={key} args={args[1:]}")
         try:
@@ -261,7 +333,7 @@ class LlamaManager:
         t = self._threads()
         if t > 0:
             args += ["-t", str(t)]
-        if self.cfg.get("useMlock", True):
+        if self._use_mlock():
             args += ["--mlock"]
         self._log(f"임베딩 서버 기동: port={port}")
         try:

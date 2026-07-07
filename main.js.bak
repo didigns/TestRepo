@@ -372,11 +372,6 @@ function handleCacheMessage(msg) {
     if (meetingWin && !meetingWin.isDestroyed()) meetingWin.webContents.send("live-text", msg);
     return;
   }
-  if (msg.type === "live-minutes") {
-    // 실시간 회의록(증분 Gemma 요약) → 회의록 창으로
-    if (meetingWin && !meetingWin.isDestroyed()) meetingWin.webContents.send("live-minutes", msg);
-    return;
-  }
   if (msg.type === "chat-chunk") {
     if (win && !win.isDestroyed()) win.webContents.send("chat-chunk", msg);
     // 콘솔·회의록 창도 스트리밍 수신(각자 자기 질문 대기 중일 때만 표시)
@@ -1866,84 +1861,4 @@ app.whenReady().then(async () => {
   startCacheWorker();
   createTray();       // 오브가 가려져도 트레이로 항상 접근 가능
   registerHotkey();   // 기본 Alt+Space — 어디서든 질문
-  applyAutoStart();   // 부팅 시 자동 시작(설정 토글 반영)
-  // 회의 녹음: 마이크 권한 자동 허용 + 시스템 소리(루프백) 캡처 핸들러
-  try {
-    session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) =>
-      cb(permission === "media" || permission === "display-capture"));
-    session.defaultSession.setDisplayMediaRequestHandler(async (_req, callback) => {
-      try {
-        const sources = await desktopCapturer.getSources({ types: ["screen"] });
-        callback({ video: sources[0], audio: "loopback" }); // Windows 시스템 오디오
-      } catch (e) { callback({}); }
-    });
-  } catch (e) { /* 구버전 Electron 등 — 녹음은 마이크만 동작 */ }
-});
-
-app.on("will-quit", () => {
-  try { globalShortcut.unregisterAll(); } catch (e) {}
-});
-
-// 자식 프로세스 트리 전체 강제 종료 (Windows: taskkill /T 로 손자 llama-server.exe까지)
-function killProcTree(proc) {
-  if (!proc || proc.exitCode !== null) return;
-  try {
-    if (process.platform === "win32") {
-      require("child_process").spawnSync(
-        "taskkill", ["/pid", String(proc.pid), "/T", "/F"],
-        { windowsHide: true }
-      );
-    } else {
-      proc.kill("SIGKILL");
-    }
-  } catch (e) {}
-}
-
-// pid 만으로 프로세스 트리 강제 종료 (이미 죽은 부모의 손자 llama/whisper 회수용).
-// killProcTree 는 살아있는 proc 객체가 필요하지만, 워커가 크래시로 이미 죽은 경우엔
-// 남겨진 pid 로 손자(llama-server/whisper-server)를 정리해야 한다.
-function killPidTree(pid) {
-  if (!pid) return;
-  try {
-    if (process.platform === "win32") {
-      require("child_process").spawnSync(
-        "taskkill", ["/pid", String(pid), "/T", "/F"],
-        { windowsHide: true }
-      );
-    } else {
-      try { process.kill(-pid, "SIGKILL"); }
-      catch (e) { try { process.kill(pid, "SIGKILL"); } catch (e2) {} }
-    }
-  } catch (e) {}
-}
-
-app.on("before-quit", (e) => {
-  if (appQuitting) return; // 재진입 방지(app.exit 경로)
-  appQuitting = true;
-  if (!daemon && !cacheProc) return;
-  // 워커가 llama-server를 정리하고 스스로 종료할 시간을 확보한다.
-  // (기존 setTimeout 방식은 Electron이 타이머를 기다리지 않아 실행 보장이 없었고,
-  //  kill()은 워커만 죽여 손자인 llama-server가 고아로 남았다)
-  e.preventDefault();
-  try { if (daemon) sendCommand("shutdown").catch(() => {}); } catch (err) {}
-  try { if (cacheProc) sendCacheCommand("shutdown", {}, { expectResult: false }); } catch (err) {}
-  let finished = false;
-  const finish = () => {
-    if (finished) return;
-    finished = true;
-    clearInterval(poll);
-    clearTimeout(deadline);
-    killProcTree(daemon); daemon = null;
-    killProcTree(cacheProc); cacheProc = null;
-    app.exit(0);
-  };
-  // 둘 다 스스로 종료하면 즉시 종료, 아니면 3초 후 트리 강제 종료
-  const poll = setInterval(() => { if (!daemon && !cacheProc) finish(); }, 100);
-  const deadline = setTimeout(finish, 3000);
-});
-
-// (HF 다운로드 기능 포함)
-app.on("window-all-closed", () => app.quit());
-app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow();
-});
+  applyAutoStart();   // 부팅 �

@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld("leva", {
   liveStop: () => ipcRenderer.invoke("live-stop"),
   liveAudio: (buf) => ipcRenderer.send("live-audio", buf),
   onLiveText: (cb) => ipcRenderer.on("live-text", (_e, payload) => cb(payload)),
+  onLiveMinutes: (cb) => ipcRenderer.on("live-minutes", (_e, payload) => cb(payload)),
   exportMeetingPdf: (payload) => ipcRenderer.invoke("export-meeting-pdf", payload),
 
   // llama.cpp 준비(자동 설치)
@@ -85,6 +86,7 @@ contextBridge.exposeInMainWorld("leva", {
 
   // Hugging Face 모델 다운로드 (모델 카탈로그 기반)
   hfListModels: () => ipcRenderer.invoke("hf-list-models"),
+  whisperSetActive: (key) => ipcRenderer.invoke("whisper-set-active", key), // 전사 활성 모델 전환
   hfDownloadModel: (key) => ipcRenderer.invoke("hf-download-model", key),
   hfDownloadCancel: () => ipcRenderer.invoke("hf-download-cancel"),
   onHfProgress: (cb) => ipcRenderer.on("hf-download-progress", (_e, payload) => cb(payload)),

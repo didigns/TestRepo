@@ -185,6 +185,13 @@
   .mdl .n { font-size: 12.5px; }
   .mdl .d { font-size: 11px; color: var(--tx3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .mdl .prog { width: 130px; flex: none; display: none; }
+  /* 전사 모델 그룹 */
+  .wgroup { border-top: 1px solid var(--line2); margin-top: 4px; padding-top: 8px; }
+  .wgroup-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 2px; }
+  .wgroup-t { font-size: 12px; font-weight: 600; color: var(--tx2); }
+  .wgroup-sel { font-size: 11px; color: var(--tx3); display: flex; align-items: center; gap: 6px; }
+  .wgroup-sel select { background: var(--panel2); color: var(--tx); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font-size: 11px; }
+  .wgroup-sel select:disabled { opacity: .5; }
   .hint { font-size: 11px; color: var(--tx3); margin-top: 8px; }
   #toast {
     position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
@@ -938,23 +945,48 @@
     setTimeout(refreshList, 1500);
   });
 
-  async function renderModels() {
-    const models = await window.leva.hfListModels().catch(() => []);
-    if (!models || !models.length) {
-      $("modelList").innerHTML = '<div class="empty">모델 카탈로그를 불러오지 못했습니다</div>';
-      return;
-    }
-    $("modelList").innerHTML = models.map((m) =>
-      '<div class="mdl" id="mdl-' + esc(m.key) + '">' +
+  function modelRowHtml(m) {
+    return '<div class="mdl" id="mdl-' + esc(m.key) + '">' +
       '<div class="info"><div class="n">' + esc(m.name) +
-      (m.downloaded ? ' <span class="chip ok">설치됨</span>' : "") + "</div>" +
+      (m.downloaded ? ' <span class="chip ok">설치됨</span>' : "") +
+      (m.active ? ' <span class="chip mint">활성</span>' : "") + "</div>" +
       '<div class="d">' + esc(m.desc || "") + "</div></div>" +
       '<div class="prog"><div class="bar"><i style="width:0%"></i></div>' +
       '<div class="hint" style="margin-top:3px;"></div></div>' +
       (m.downloaded
         ? ""
         : '<button class="btn mint dlm" data-key="' + esc(m.key) + '">받기</button>') +
-      "</div>").join("");
+      "</div>";
+  }
+
+  async function renderModels() {
+    const models = await window.leva.hfListModels().catch(() => []);
+    if (!models || !models.length) {
+      $("modelList").innerHTML = '<div class="empty">모델 카탈로그를 불러오지 못했습니다</div>';
+      return;
+    }
+    // 전사(whisper) 모델은 별도 그룹 + 활성 선택 드롭다운으로 묶는다.
+    const whisper = models.filter((m) => m.group === "whisper");
+    const others = models.filter((m) => m.group !== "whisper");
+    let html = others.map(modelRowHtml).join("");
+    if (whisper.length) {
+      const dl = whisper.filter((m) => m.downloaded);
+      const opts = dl.map((m) =>
+        '<option value="' + esc(m.key) + '"' + (m.active ? " selected" : "") + '>' +
+        esc(m.name.replace(" (전사)", "")) + "</option>").join("");
+      html +=
+        '<div class="wgroup">' +
+          '<div class="wgroup-h">' +
+            '<span class="wgroup-t">전사 모델 (Whisper)</span>' +
+            '<label class="wgroup-sel">활성 ' +
+              '<select id="whisperActive"' + (dl.length ? "" : " disabled") + '>' +
+                (dl.length ? opts : '<option>다운로드 후 선택</option>') +
+              "</select></label>" +
+          "</div>" +
+          whisper.map(modelRowHtml).join("") +
+        "</div>";
+    }
+    $("modelList").innerHTML = html;
     $("modelList").querySelectorAll(".dlm").forEach((b) =>
       b.addEventListener("click", () => {
         b.disabled = true; b.textContent = "다운로드 중…";
@@ -967,6 +999,16 @@
           })
           .catch(() => { toast("다운로드 실패"); renderModels(); });
       }));
+    const sel = $("whisperActive");
+    if (sel) sel.addEventListener("change", () => {
+      sel.disabled = true;
+      window.leva.whisperSetActive(sel.value)
+        .then((r) => {
+          toast(r && r.ok ? "전사 모델 변경 — 적용 중" : "변경 실패" + (r && r.message ? ": " + r.message : ""));
+          renderModels();
+        })
+        .catch(() => { toast("변경 실패"); renderModels(); });
+    });
   }
   $("btnWhisperSetup").addEventListener("click", async () => {
     const b = $("btnWhisperSetup");

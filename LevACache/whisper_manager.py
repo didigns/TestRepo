@@ -62,34 +62,80 @@ class WhisperManager:
         if self._alive():
             return
         exe = self.cfg["whisperServerExe"]
-        args = [
+        # 스레드: 미지정 시 논리 코어 수(최소 4). CPU 경로에서 속도에 가장 큰 영향을 준다.
+        threads = int(self.cfg.get("whisperThreads", 0) or 0)
+        if threads <= 0:
+            threads = max(4, os.cpu_count() or 4)
+        base = [
             exe, "-m", self.cfg["whisperModel"],
             "--host", self.cfg.get("host", "127.0.0.1"),
             "--port", str(self.port),
+            "-t", str(threads),
         ]
         lang = str(self.cfg.get("whisperLanguage", "auto") or "auto")
-        args += ["-l", lang]
-        self._log(f"whisper-server 기동: port={self.port}")
-        try:
-            self.proc = subprocess.Popen(
-                args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-            )
-        except FileNotFoundError:
-            raise RuntimeError(f"whisper-server.exe를 찾을 수 없습니다: {exe}")
-        except OSError as e:
-            raise RuntimeError(f"whisper-server 실행 실패: {e}")
-        # 모델 로드 대기(/ 는 데모 페이지, 기동 확인용으로 충분)
+        base += ["-l", lang]
+        if self.cfg.get("whisperNoGpu"):
+            base += ["-ng"]  # 진단용: GPU 강제 비활성(CPU만)
+
+        # flash-attention 우선 시도(속도↑). 구버전 빌드에서 미지원이면 자동 폴백한다.
+        use_fa = self.cfg.get("whisperFlashAttn", True)
+        attempts = ([base + ["-fa"]] if use_fa else []) + [base]
+        last_err = None
+        for args in attempts:
+            fa_on = "-fa" in args
+            self._log(f"whisper-server 기동: port={self.port}, t={threads}, "
+                      f"fa={'on' if fa_on else 'off'}, "
+                      f"gpu={'off' if self.cfg.get('whisperNoGpu') else 'auto'}")
+            try:
+                self.proc = subprocess.Popen(
+                    args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            except FileNotFoundError:
+                raise RuntimeError(f"whisper-server.exe를 찾을 수 없습니다: {exe}")
+            except OSError as e:
+                raise RuntimeError(f"whisper-server 실행 실패: {e}")
+            # stderr 를 앱 로그로 흘려 GPU/CPU 사용 여부·오류를 확인 가능하게 한다.
+            threading.Thread(target=self._pump_stderr,
+                             args=(self.proc.stderr,), daemon=True).start()
+            if self._wait_ready():
+                return
+            # 이번 시도 실패(예: -fa 미지원으로 조기 종료) → 다음 폴백으로.
+            last_err = "whisper-server 기동 실패(모델 경로/빌드 확인)"
+            try:
+                self.proc.terminate()
+            except Exception:
+                pass
+            self.proc = None
+        raise RuntimeError(last_err or "whisper-server 기동 실패")
+
+    def _wait_ready(self):
+        """모델 로드까지 대기. 준비되면 True, 조기 종료/타임아웃이면 False.
+        (/ 는 데모 페이지 — 응답이 오면 서버가 준비된 것으로 본다)"""
         deadline = time.time() + int(self.cfg.get("startupTimeout", 120) or 120)
         while time.time() < deadline:
             if not self._alive():
-                raise RuntimeError("whisper-server가 종료되었습니다(모델 경로 확인).")
+                return False  # 조기 종료 → 상위에서 폴백 시도
             try:
                 with urllib.request.urlopen(self.base_url + "/", timeout=2) as r:
                     if r.status < 500:
-                        return
+                        return True
             except Exception:
                 time.sleep(1)
-        raise RuntimeError("whisper-server 기동 시간 초과")
+        return False
+
+    def _pump_stderr(self, pipe):
+        """whisper-server stderr 를 앱 로그로. 진단에 유용한 줄만 남겨 로그 스팸을 막는다.
+        (예: 'ggml_cuda_init: found 1 CUDA devices' → GPU 사용,
+              'whisper_backend_init: ... CPU' → CPU 폴백)"""
+        KEEP = ("cuda", "gpu", "error", "fail", "backend", "device",
+                "blas", "flash", "whisper_init", "whisper_model_load",
+                "system_info", "load time", "total time")
+        try:
+            for raw in iter(pipe.readline, b""):
+                line = raw.decode("utf-8", "replace").rstrip()
+                if line and any(k in line.lower() for k in KEEP):
+                    self._log("[whisper] " + line)
+        except Exception:
+            pass
 
     def stop(self):
         if self.proc and self.proc.poll() is None:

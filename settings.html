@@ -210,6 +210,15 @@
     transition: border-color .15s, background .15s;
   }
   .mrow:hover { border-color: var(--border-strong); }
+  /* 전사 모델 그룹 */
+  .mgroup { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; display: flex; flex-direction: column; gap: 12px; background: rgba(255,255,255,0.02); }
+  .mgroup-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .mgroup-title { font-size: 13px; font-weight: 700; color: #f0f2f7; }
+  .mgroup-sel { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-2); }
+  .mgroup-sel select { background: var(--card); color: #f0f2f7; border: 1px solid var(--border-strong); border-radius: 8px; padding: 5px 8px; font-size: 12px; }
+  .mgroup-sel select:disabled { opacity: .55; }
+  .mgroup .mrow { background: var(--card); }
+  .mactive { font-size: 11px; font-weight: 700; color: #35d29a; background: rgba(53,210,154,0.12); border: 1px solid rgba(53,210,154,0.35); padding: 2px 8px; border-radius: 30px; }
   .micon {
     width: 44px; height: 44px; border-radius: 12px; flex: none;
     display: flex; align-items: center; justify-content: center;
@@ -366,6 +375,10 @@
               <div class="il"><div class="lbl">자동 캐싱</div><div class="desc">이미지·스캔 PDF는 MiniCPM으로 글자 추출 후 Gemma가 분석, 그 외 문서·PDF 텍스트는 Gemma가 바로 분석합니다.</div></div>
               <label class="switch"><input id="enableCache" type="checkbox" /><span class="slider"></span></label>
             </div>
+            <div class="item">
+              <div class="il"><div class="lbl">저메모리 모드</div><div class="desc">유휴 시 모델을 내리고 mlock을 해제해 상주 메모리를 크게 줄입니다(16GB급 권장). 유휴 후 첫 요청은 재로딩으로 수 초 느려집니다. 켜고 저장하면 캐시 워커가 재시작됩니다.</div></div>
+              <label class="switch"><input id="lowMemory" type="checkbox" /><span class="slider"></span></label>
+            </div>
           </div>
           <div class="card pad">
             <div class="card-h" style="justify-content:space-between">
@@ -412,7 +425,7 @@
 
   <script>
     const $ = (id) => document.getElementById(id);
-    const ids = ["alwaysOnTop","notifyOnEvents","ignore","enableCache"];
+    const ids = ["alwaysOnTop","notifyOnEvents","ignore","enableCache","lowMemory"];
     const el = {}; ids.forEach((i) => el[i] = $(i));
     const statusEl = $("status"), obsStatusEl = $("obsStatus"), cacheStatusEl = $("cacheStatus");
     const obsDot = $("obsDot"), cacheDot = $("cacheDot");
@@ -422,7 +435,11 @@
     let cacheRows = {}; // path -> 캐시 목록 행 element (실시간 단계 갱신용)
 
     // 모델 아이콘 매핑
-    const MODEL_ICON = { textModel: "💬", visionModel: "🖼️", visionMmproj: "🔗" };
+    const MODEL_ICON = {
+      textModel: "💬", visionModel: "🖼️", visionMmproj: "🔗",
+      whisper_tiny: "🎙️", whisper_base: "🎙️", whisper_small: "🎙️",
+      whisper_medium: "🎙️", whisper_turbo: "🎙️",
+    };
 
     // ---- 사이드바 네비게이션 ----
     document.querySelectorAll(".navitem").forEach((nav) => {
@@ -449,6 +466,7 @@
       el.notifyOnEvents.checked = cfg.notifyOnEvents !== false;
       el.ignore.value = (cfg.ignorePatterns || []).join(", ");
       el.enableCache.checked = cfg.enableCache !== false;
+      el.lowMemory.checked = !!cfg.lowMemory;
     }
 
     function setStatus(node, dot, running, err) {
@@ -636,6 +654,7 @@
         alwaysOnTop: el.alwaysOnTop.checked,
         notifyOnEvents: el.notifyOnEvents.checked,
         enableCache: el.enableCache.checked,
+        lowMemory: el.lowMemory.checked,
       });
       try { await window.leva.observerSetIgnore(patterns); } catch (e) {}
       flash("저장되었습니다 · 모델 경로 변경 시 재시작 권장");
@@ -669,6 +688,7 @@
           '<div class="mprog" hidden><span class="mpct">0%</span><span class="mspeed">–</span><span class="msize">–</span></div>' +
         '</div>' +
         '<div class="maction">' +
+          '<span class="mactive" hidden>활성</span>' +
           '<button class="btn mdl">다운로드</button>' +
           '<button class="mcancel" hidden>취소</button>' +
           '<span class="mdone" hidden><span class="cc">✓</span>설치됨</span>' +
@@ -681,6 +701,7 @@
         const c = document.createElement("span"); c.className = "mchip"; c.textContent = part; meta.appendChild(c);
       });
       if (m.downloaded) setRowDone(row);
+      if (m.active) row.querySelector(".mactive").hidden = false;
       row.querySelector(".mdl").addEventListener("click", () => startDownload(m.key, row));
       row.querySelector(".mcancel").addEventListener("click", () => window.leva.hfDownloadCancel());
       return row;
@@ -715,7 +736,12 @@
       dlBusy = false; setButtonsDisabled(false);
       row.querySelector(".mcancel").hidden = true;
       fill.classList.remove("indeterminate");
-      if (r && r.ok) { setRowDone(row); flash("다운로드 완료 · " + row.querySelector(".mname").textContent); }
+      if (r && r.ok) {
+        setRowDone(row);
+        flash("다운로드 완료 · " + row.querySelector(".mname").textContent);
+        // 전사 모델이면 활성 드롭다운/활성 표시 갱신을 위해 목록 재렌더
+        if (String(key).indexOf("whisper") === 0) renderModels();
+      }
       else {
         row.querySelector(".mdl").hidden = false;
         bar.hidden = true; prog.hidden = true;
@@ -746,7 +772,42 @@
       try { models = await window.leva.hfListModels(); } catch (e) {}
       if (!models.length) { modelListEl.innerHTML = '<div class="empty">불러올 모델이 없습니다.</div>'; return; }
       modelListEl.innerHTML = "";
-      models.forEach((m) => modelListEl.appendChild(buildModelRow(m)));
+      const whisper = models.filter((m) => m.group === "whisper");
+      const others = models.filter((m) => m.group !== "whisper");
+      others.forEach((m) => modelListEl.appendChild(buildModelRow(m)));
+      if (whisper.length) modelListEl.appendChild(buildWhisperGroup(whisper));
+    }
+
+    // 전사 모델 그룹: 다운로드 가능한 모델 목록 + 활성 선택 드롭다운
+    function buildWhisperGroup(list) {
+      const wrap = document.createElement("div");
+      wrap.className = "mgroup";
+      const head = document.createElement("div");
+      head.className = "mgroup-h";
+      const downloaded = list.filter((m) => m.downloaded);
+      const opts = downloaded.map((m) =>
+        '<option value="' + m.key + '"' + (m.active ? " selected" : "") + '>' +
+        m.name.replace(" (전사)", "") + '</option>'
+      ).join("");
+      head.innerHTML =
+        '<span class="mgroup-title">전사 모델 (Whisper)</span>' +
+        '<label class="mgroup-sel">활성 모델 ' +
+          '<select id="whisperActive"' + (downloaded.length ? "" : " disabled") + '>' +
+            (downloaded.length ? opts : '<option>다운로드 후 선택</option>') +
+          '</select>' +
+        '</label>';
+      wrap.appendChild(head);
+      list.forEach((m) => wrap.appendChild(buildModelRow(m)));
+      const sel = head.querySelector("#whisperActive");
+      if (sel) sel.addEventListener("change", async () => {
+        const key = sel.value;
+        sel.disabled = true;
+        const r = await window.leva.whisperSetActive(key);
+        sel.disabled = false;
+        if (r && r.ok) { flash("전사 모델 변경 · 적용 중…"); renderModels(); }
+        else flash((r && r.message) || "전사 모델 변경 실패", "bad");
+      });
+      return wrap;
     }
 
     // ---- 실시간 캐싱 진행 표시 ----

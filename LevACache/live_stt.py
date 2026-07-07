@@ -83,11 +83,20 @@ class LiveSTT:
         self._th.start()
 
     # ---- 입력 ----------------------------------------------------------
+    # 버퍼 상한(초). 전사 루프가 밀려도(CPU 과부하 등) 오디오가 무한정
+    # 쌓여 메모리가 커지지 않게 앞부분을 버린다. 15초 확정 상한보다 넉넉히.
+    MAX_BUF_SEC = 30
+
     def feed(self, pcm_bytes):
         if not pcm_bytes:
             return
         with self._lock:
             self._buf += pcm_bytes
+            cap = self.SR * 2 * self.MAX_BUF_SEC  # int16 mono = 2 bytes/sample
+            if len(self._buf) > cap:
+                drop = len(self._buf) - cap
+                del self._buf[:drop]
+                self._base += drop // 2  # 타임라인 유지(버린 샘플만큼 전진)
 
     # ---- 내부 ----------------------------------------------------------
     def _snapshot(self):

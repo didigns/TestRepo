@@ -184,7 +184,23 @@
   @keyframes blink { 50% { opacity: 0.25; } }
   #liveViewHead #liveStat { font-size: 11px; color: var(--warn); font-weight: 400; }
   #liveViewHead .sub { margin-left: auto; font-size: 10.5px; color: var(--tx3); font-weight: 400; }
-  #liveScroll { flex: 1; overflow-y: auto; padding: 18px; }
+  /* 실시간 회의록(상단, Gemma) */
+  #liveMinutes { flex: 1.4; min-height: 0; display: flex; flex-direction: column;
+    border-bottom: 1px solid var(--line2); background: var(--panel2); }
+  #liveMinHead { flex: none; padding: 10px 18px 6px; font-size: 12px; font-weight: 700;
+    color: var(--mint); display: flex; align-items: center; gap: 8px; }
+  #liveMinHead #liveMinStat { font-size: 10.5px; color: var(--tx3); font-weight: 400; }
+  #liveMinBody { flex: 1; overflow-y: auto; padding: 2px 18px 16px;
+    max-width: 860px; width: 100%; }
+  .lm-sec { margin-top: 13px; }
+  .lm-sec .lm-h { font-size: 11px; font-weight: 700; margin-bottom: 5px;
+    text-transform: none; letter-spacing: .2px; }
+  .lm-sec ul { margin: 0; padding-left: 18px; }
+  .lm-sec li { font-size: 12.5px; line-height: 1.5; margin-bottom: 3px; color: var(--tx); }
+  .lm-sec .lm-body { font-size: 12.5px; line-height: 1.55; color: var(--tx); }
+  #liveScriptHead { font-size: 10.5px; font-weight: 600; color: var(--tx3);
+    text-transform: uppercase; letter-spacing: .4px; margin-bottom: 10px; }
+  #liveScroll { flex: 1; overflow-y: auto; padding: 14px 18px 18px; }
   #liveDoc {
     max-width: 780px; margin: 0 auto; background: var(--panel);
     border: 1px solid var(--line); border-radius: 12px;
@@ -230,14 +246,21 @@
         <div style="font-size:11px;">녹음이 끝나면 전사 → 회의록 → PDF까지 자동으로 이어집니다</div>
       </div>
 
-      <!-- 녹음 중: 메인 화면 실시간 전사(문서 형식) -->
+      <!-- 녹음 중: 상단 실시간 회의록(Gemma) + 하단 실시간 전사 -->
       <div id="liveView">
         <div id="liveViewHead">
-          <span class="livedot"></span>녹음 중 — 실시간 전사
+          <span class="livedot"></span>녹음 중 — 실시간 회의록
           <span id="liveStat"></span>
-          <span class="sub">말이 멈추는 순간 문장이 기록됩니다. 최종 전사는 저장 후 정교화됩니다</span>
+          <span class="sub">약 40초마다 회의록이 자동 갱신됩니다. 최종본은 저장 후 정교화됩니다</span>
+        </div>
+        <div id="liveMinutes">
+          <div id="liveMinHead">📝 실시간 회의록<span id="liveMinStat"></span></div>
+          <div id="liveMinBody">
+            <div class="empty">회의가 진행되면 약 40초마다 회의록이 자동으로 채워집니다</div>
+          </div>
         </div>
         <div id="liveScroll">
+          <div id="liveScriptHead">실시간 전사(원문)</div>
           <div id="liveDoc">
             <div class="lsys" id="liveBoot">듣는 중… 말하면 문장 단위로 이어서 기록됩니다</div>
           </div>
@@ -266,6 +289,14 @@
               <div class="h" style="color:var(--warn);">처리 중</div>
               <div class="body" id="progStep">-</div>
             </div>
+            <div class="sec" id="secOverview" style="display:none;">
+              <div class="h" style="color:var(--tx2);">개요</div>
+              <div class="body" id="overviewBody"></div>
+            </div>
+            <div class="sec" id="secContent" style="display:none;">
+              <div class="h" style="color:var(--mint);">핵심 내용</div>
+              <div id="contentList"></div>
+            </div>
             <div class="sec" id="secDecide" style="display:none;">
               <div class="h" style="color:var(--ok);">결정사항</div>
               <div id="decideList"></div>
@@ -273,10 +304,6 @@
             <div class="sec" id="secTodo" style="display:none;">
               <div class="h" style="color:var(--warn);">액션아이템</div>
               <div id="todoList"></div>
-            </div>
-            <div class="sec" id="secAgenda" style="display:none;">
-              <div class="h" style="color:var(--tx2);">주요 안건</div>
-              <div class="body" id="agendaBody"></div>
             </div>
             <div class="sec" id="secOpen" style="display:none;">
               <div class="h" style="color:var(--info);">미결 이슈</div>
@@ -499,14 +526,17 @@
   /* ---- 회의록 구조화 렌더 ---- */
   function splitSummary(s) {
     s = String(s || "").trim();
-    const marks = [["①", "agenda"], ["②", "decide"], ["③", "todo"], ["④", "open"]];
+    const marks = [["①", "overview"], ["②", "content"], ["③", "decide"], ["④", "todo"], ["⑤", "open"],
+      // 구버전(4섹션) 호환: ①=안건 → 핵심내용 자리로
+      ];
     const idx = marks.map(([m, k]) => ({ k, i: s.indexOf(m) })).filter((x) => x.i >= 0).sort((a, b) => a.i - b.i);
     if (!idx.length) return { raw: s };
     const out = {};
     if (idx[0].i > 0) out.raw = s.slice(0, idx[0].i).trim();
     for (let k = 0; k < idx.length; k++) {
       const end = k + 1 < idx.length ? idx[k + 1].i : s.length;
-      out[idx[k].k] = s.slice(idx[k].i + 1, end).replace(/^[\s:.\-]*(주요\s*안건|결정\s*사항|액션\s*아이템|미결\s*이슈)?[\s:.\-]*/, "").trim();
+      out[idx[k].k] = s.slice(idx[k].i + 1, end)
+        .replace(/^[\s:.\-]*(개요|핵심\s*내용|주요\s*안건|결정\s*사항|액션\s*아이템|미결\s*이슈)?[\s:.\-]*/, "").trim();
     }
     return out;
   }
@@ -529,16 +559,31 @@
     $("progStep").textContent = STAGE_LABEL[m.stage] || "대기 중 — 완료되면 회의록이 표시됩니다";
     const s = splitSummary(m.summary || "");
     const show = (id, on) => ($(id).style.display = on ? "block" : "none");
+    const hasTxt = (x) => { x = (x || "").trim(); return x && x !== "해당 없음"; };
+    const listItems = (b) => splitItems(b).filter((x) => x && x !== "해당 없음");
+    // 구버전(4섹션) 요약 호환: content 없이 agenda 만 있으면 그걸 핵심내용으로.
+    const content = s.content || s.agenda;
 
-    show("secDecide", !!s.decide);
-    if (s.decide)
-      $("decideList").innerHTML = splitItems(s.decide).map((x) =>
+    show("secOverview", hasTxt(s.overview));
+    if (hasTxt(s.overview)) $("overviewBody").textContent = s.overview;
+
+    const cItems = listItems(content);
+    show("secContent", cItems.length > 0);
+    if (cItems.length)
+      $("contentList").innerHTML = "<ul style=\"margin:0;padding-left:18px\">" +
+        cItems.map((x) => "<li style=\"margin-bottom:6px\">" + esc(x) + "</li>").join("") + "</ul>";
+
+    const dItems = listItems(s.decide);
+    show("secDecide", dItems.length > 0);
+    if (dItems.length)
+      $("decideList").innerHTML = dItems.map((x) =>
         '<div class="decision"><span class="ck">✓</span><span>' + esc(x) + "</span></div>").join("");
 
-    show("secTodo", !!s.todo);
-    if (s.todo) {
+    const tItems = listItems(s.todo);
+    show("secTodo", tItems.length > 0);
+    if (tItems.length) {
       const checked = meta.get(m.path).todo || [];
-      const items = splitItems(s.todo).map(parseAction);
+      const items = tItems.map(parseAction);
       $("todoList").innerHTML = items.map((it, i) =>
         '<div class="todo' + (checked.includes(i) ? " done" : "") + '" data-i="' + i + '">' +
         '<input type="checkbox"' + (checked.includes(i) ? " checked" : "") + " />" +
@@ -557,11 +602,10 @@
         }));
     }
 
-    show("secAgenda", !!s.agenda);
-    if (s.agenda) $("agendaBody").textContent = s.agenda;
-    show("secOpen", !!s.open);
-    if (s.open) $("openBody").textContent = s.open;
-    show("secRaw", !!s.raw && !s.decide && !s.todo);
+    show("secOpen", hasTxt(s.open));
+    if (hasTxt(s.open)) $("openBody").textContent = s.open;
+    const anyStructured = hasTxt(s.overview) || cItems.length || dItems.length || tItems.length;
+    show("secRaw", !!s.raw && !anyStructured);
     if (s.raw) $("rawBody").textContent = s.raw;
     if (!done && !m.summary) show("secRaw", false);
 
@@ -772,6 +816,7 @@
     cv.height = 34;
     // 메인 화면을 실시간 전사 문서로 전환
     $("liveDoc").innerHTML = '<div class="lsys" id="liveBoot">듣는 중… 말하면 문장 단위로 이어서 기록됩니다</div>';
+    resetLiveMinutes();
     showLiveView(true);
     $("recTitle").value = "";
     $("recTitle").focus();
@@ -842,6 +887,47 @@
         $("liveScroll").scrollTop = $("liveScroll").scrollHeight;
       }
     }
+  });
+
+  /* ---- 실시간 회의록(Gemma 증분 요약) 렌더 ---- */
+  function resetLiveMinutes() {
+    const stat = $("liveMinStat"); if (stat) stat.textContent = "";
+    $("liveMinBody").innerHTML =
+      '<div class="empty">회의가 진행되면 약 40초마다 회의록이 자동으로 채워집니다</div>';
+  }
+  function renderLiveMinutes(minutes) {
+    const s = splitSummary(minutes || "");
+    const box = $("liveMinBody");
+    const secList = (title, color, body) => {
+      const items = splitItems(body).filter((x) => x && x !== "해당 없음");
+      if (!items.length) return "";
+      return '<div class="lm-sec"><div class="lm-h" style="color:' + color + '">' + title +
+        '</div><ul>' + items.map((it) => "<li>" + esc(it) + "</li>").join("") + "</ul></div>";
+    };
+    const secBody = (title, color, body) => {
+      body = (body || "").trim();
+      if (!body || body === "해당 없음") return "";
+      return '<div class="lm-sec"><div class="lm-h" style="color:' + color + '">' + title +
+        '</div><div class="lm-body">' + esc(body) + "</div></div>";
+    };
+    let html = "";
+    html += secBody("개요", "var(--tx2)", s.overview);
+    html += secList("핵심 내용", "var(--mint)", s.content || s.agenda);
+    html += secList("결정사항", "var(--ok)", s.decide);
+    html += secList("액션아이템", "var(--warn)", s.todo);
+    html += secBody("미결 이슈", "var(--info)", s.open);
+    if (!html && s.raw) html = '<div class="lm-body">' + esc(s.raw) + "</div>";
+    box.innerHTML = html ||
+      '<div class="empty">아직 정리할 내용이 부족합니다 — 대화가 더 쌓이면 갱신됩니다</div>';
+  }
+  if (window.leva.onLiveMinutes) window.leva.onLiveMinutes((m) => {
+    if (!m) return;
+    const stat = $("liveMinStat");
+    if (m.working) { if (stat) stat.textContent = "작성 중…"; return; }
+    if (m.minutes != null) {
+      renderLiveMinutes(m.minutes);
+      if (stat) stat.textContent = "갱신됨 · " + new Date().toLocaleTimeString("ko-KR");
+    } else if (stat) { stat.textContent = ""; }
   });
 
   /* ---- 실시간 전사 미리보기: 6초 이상 쌓이면 조각을 전사해 붙인다 ---- */
@@ -1012,36 +1098,106 @@
   window.addEventListener("beforeunload", () => { if (rec) stopRec(); });
 
   /* ================= PDF 내보내기 ================= */
+  const REPORT_CSS = `
+    @page { size:A4; margin:16mm; }
+    * { box-sizing:border-box; }
+    body { font-family:'Malgun Gothic','Apple SD Gothic Neo','Segoe UI',sans-serif;
+      color:#212529; line-height:1.6; background:#F8F9FA; margin:0; padding:24px; font-size:11pt; }
+    .wrap { max-width:820px; margin:0 auto; }
+    .header { border-bottom:3px solid #343A40; padding-bottom:14px; margin-bottom:26px; }
+    .header h1 { font-size:24pt; margin:0; font-weight:800; letter-spacing:-1px; color:#212529; }
+    .header p { margin:8px 0 0; color:#6C757D; font-size:10.5pt; }
+    .meta-box { display:table; width:100%; background:#fff; border:1px solid #DEE2E6;
+      border-radius:8px; margin-bottom:26px; padding:16px; }
+    .meta-col { display:table-cell; width:50%; vertical-align:top; }
+    .meta-item { margin-bottom:9px; font-size:10.5pt; }
+    .meta-item:last-child { margin-bottom:0; }
+    .meta-label { font-weight:700; color:#495057; display:inline-block; width:60px; }
+    h2 { font-size:14pt; color:#212529; border-left:5px solid #3B5BDB; padding-left:11px;
+      margin:26px 0 13px; font-weight:700; }
+    .section-box { background:#fff; border:1px solid #DEE2E6; border-radius:8px;
+      padding:16px 22px; margin-bottom:20px; }
+    .section-box ul { margin:0; padding-left:20px; }
+    .section-box li { margin-bottom:8px; font-size:10.5pt; }
+    .section-box li:last-child { margin-bottom:0; }
+    .section-box .txt { white-space:pre-wrap; font-size:10.5pt; }
+    .kw { color:#556070; font-size:10pt; }
+    table.action-items { width:100%; border-collapse:collapse; margin:6px 0 20px;
+      font-size:10pt; background:#fff; }
+    table.action-items th, table.action-items td { border:1px solid #DEE2E6;
+      padding:10px 12px; text-align:left; vertical-align:top; }
+    table.action-items th { background:#F1F3F5; color:#495057; font-weight:700; }
+    .status { display:inline-block; padding:3px 10px; border-radius:20px;
+      font-size:8.5pt; font-weight:700; }
+    .status-todo { background:#F1F3F5; color:#868E96; border:1px solid #DEE2E6; }
+    .status-done { background:#D3F9D8; color:#2B8A3E; border:1px solid #B2F2BB; }
+    table.script { width:100%; border-collapse:collapse; font-size:9.5pt; margin-top:4px; }
+    table.script td { padding:4px 8px; border-bottom:1px solid #EEF0F5; vertical-align:top; }
+    table.script td.t { color:#3B5BDB; white-space:nowrap; font-family:Consolas,monospace; width:56px; }
+    .footer { margin-top:40px; text-align:center; font-size:9pt; color:#ADB5BD;
+      border-top:1px solid #DEE2E6; padding-top:18px; }
+  `;
+
   function buildReportHtml(m, opts) {
     const s = splitSummary(m.summary || "");
     const kw = (m.keywords || []).join(" · ");
-    const li = (body) => splitItems(body).map((x) => "<li>" + esc(x) + "</li>").join("");
-    const rows = tlLines.map((l) =>
+    const checked = (meta.get(m.path).todo) || [];
+    const items = (body) => splitItems(body).filter((x) => x && x !== "해당 없음");
+    const ul = (body) => {
+      const a = items(body);
+      return a.length ? "<ul>" + a.map((x) => "<li>" + esc(x) + "</li>").join("") + "</ul>" : "";
+    };
+    // 액션아이템 표(담당자·작업·기한·상태). 체크된 항목은 '완료' 배지.
+    const acts = items(s.todo).map(parseAction);
+    const actTable = acts.length
+      ? '<table class="action-items"><tr><th style="width:16%">담당자</th>' +
+        '<th style="width:52%">작업 내용</th><th style="width:16%">기한</th>' +
+        '<th style="width:16%">진행 상태</th></tr>' +
+        acts.map((it, i) => {
+          const st = checked.includes(i)
+            ? '<span class="status status-done">완료</span>'
+            : '<span class="status status-todo">대기</span>';
+          return "<tr><td>" + esc(it.owner || "-") + "</td><td>" + esc(it.text || "") +
+            "</td><td>" + esc(it.due || "-") + "</td><td>" + st + "</td></tr>";
+        }).join("") + "</table>"
+      : "";
+    const scriptRows = tlLines.map((l) =>
       "<tr><td class=\"t\">" + esc(l.ts) + "</td><td>" + esc(l.text) + "</td></tr>").join("");
-    return "<!DOCTYPE html><html lang=\"ko\"><head><meta charset=\"utf-8\"><style>" +
-      "body{font-family:'Malgun Gothic','Segoe UI',sans-serif;color:#1A1D26;margin:0;padding:34px 40px;font-size:12.5px;line-height:1.7}" +
-      "h1{font-size:22px;margin:0 0 4px}.meta{color:#666F80;font-size:11.5px}" +
-      ".bar{height:3px;background:#1DBFA0;margin:14px 0 20px}" +
-      "h2{font-size:14px;color:#0D8F77;margin:20px 0 7px;border-bottom:1px solid #E2E6EE;padding-bottom:4px}" +
-      "ul{margin:2px 0 2px 18px}li{margin:3px 0}.sec{white-space:pre-wrap}.kw{color:#556070;font-size:11px}" +
-      "table{width:100%;border-collapse:collapse;font-size:10.5px;margin-top:4px}" +
-      "td{padding:3px 6px;border-bottom:1px solid #EEF0F5;vertical-align:top}" +
-      "td.t{color:#0D8F77;white-space:nowrap;font-family:Consolas,monospace;width:58px}" +
-      ".foot{margin-top:26px;color:#9AA2B2;font-size:10px;text-align:right}" +
-      "</style></head><body>" +
-      "<h1>" + esc(opts.title) + "</h1>" +
-      "<div class=\"meta\">일시: " + esc(opts.date) +
-      (opts.attendees ? " · 참석: " + esc(opts.attendees) : "") +
-      " · 원본: " + esc(m.filename) + "</div><div class=\"bar\"></div>" +
-      (s.agenda ? "<h2>주요 안건</h2><div class=\"sec\">" + esc(s.agenda) + "</div>" : "") +
-      (s.decide ? "<h2>결정사항</h2><ul>" + li(s.decide) + "</ul>" : "") +
-      (s.todo ? "<h2>액션아이템</h2><ul>" + li(s.todo) + "</ul>" : "") +
-      (s.open ? "<h2>미결 이슈</h2><div class=\"sec\">" + esc(s.open) + "</div>" : "") +
-      (s.raw ? "<h2>회의 요약</h2><div class=\"sec\">" + esc(s.raw) + "</div>" : "") +
-      (kw ? "<h2>키워드</h2><div class=\"kw\">" + esc(kw) + "</div>" : "") +
-      (opts.transcript && rows ? "<h2>전체 전사</h2><table>" + rows + "</table>" : "") +
-      "<div class=\"foot\">LevA 회의록 · " + new Date().toLocaleString("ko-KR") + " 생성</div>" +
-      "</body></html>";
+
+    // 있는 섹션만 번호를 매겨 담는다.
+    let no = 0;
+    const parts = [];
+    const card = (title, inner) => "<h2>" + (++no) + ". " + title +
+      "</h2><div class=\"section-box\">" + inner + "</div>";
+    const overviewTxt = (s.overview || "").trim();
+    if (overviewTxt && overviewTxt !== "해당 없음")
+      parts.push(card("개요", "<div class=\"txt\">" + esc(s.overview) + "</div>"));
+    const contentU = ul(s.content || s.agenda); // 구버전(안건) 호환
+    if (contentU) parts.push(card("핵심 내용", contentU));
+    const decideU = ul(s.decide);
+    if (decideU) parts.push(card("결정사항", decideU));
+    if (actTable) parts.push("<h2>" + (++no) + ". 향후 일정 및 담당자</h2>" + actTable);
+    const openTxt = (s.open || "").trim();
+    if (openTxt && openTxt !== "해당 없음") parts.push(card("미결 이슈", "<div class=\"txt\">" + esc(s.open) + "</div>"));
+    if (!overviewTxt && !contentU && !decideU && !actTable && s.raw) parts.push(card("회의 요약", "<div class=\"txt\">" + esc(s.raw) + "</div>"));
+    if (kw) parts.push(card("키워드", "<div class=\"kw\">" + esc(kw) + "</div>"));
+    if (opts.transcript && scriptRows) parts.push("<h2>" + (++no) + ". 전체 전사</h2><table class=\"script\">" + scriptRows + "</table>");
+
+    const now = new Date().toLocaleString("ko-KR");
+    return "<!DOCTYPE html><html lang=\"ko\"><head><meta charset=\"utf-8\"><style>" + REPORT_CSS +
+      "</style></head><body><div class=\"wrap\">" +
+      "<div class=\"header\"><h1>" + esc(opts.title) + "</h1>" +
+      "<p>AI 자동 회의록 · 원본: " + esc(m.filename) + "</p></div>" +
+      "<div class=\"meta-box\"><div class=\"meta-col\">" +
+        "<div class=\"meta-item\"><span class=\"meta-label\">일자</span> " + esc(opts.date) + "</div>" +
+        "<div class=\"meta-item\"><span class=\"meta-label\">참석자</span> " + esc(opts.attendees || "미입력") + "</div>" +
+      "</div><div class=\"meta-col\">" +
+        "<div class=\"meta-item\"><span class=\"meta-label\">원본</span> " + esc(m.filename) + "</div>" +
+        "<div class=\"meta-item\"><span class=\"meta-label\">생성</span> " + esc(now) + "</div>" +
+      "</div></div>" +
+      parts.join("") +
+      "<div class=\"footer\">LevA 회의록 · " + esc(now) + " 생성</div>" +
+      "</div></body></html>";
   }
   $("btnExport").addEventListener("click", async () => {
     const m = meetings.find((x) => x.path === sel);

@@ -8,9 +8,15 @@ DEFAULT_CONFIG = {
     "host": "127.0.0.1",
     "port": 8080,
     # 모델(gguf) 경로 - 사용자가 설정에서 지정
-    "textModel": "",        # Gemma 4b gguf (그 외 파일)
-    "visionModel": "",      # MiniCPM-V 4.6 gguf (pdf/이미지)
-    "visionMmproj": "",     # MiniCPM-V mmproj gguf (비전 투영기)
+    "textModel": "",        # Gemma 4 gguf (텍스트 채팅·요약)
+    # 비전(이미지/스캔 PDF) 모델. 두 가지 구성이 가능하다:
+    #  (A) 통합 멀티모달: visionModel 을 textModel 과 '같은 Gemma 4 gguf' 로 두고
+    #      visionMmproj 에 Gemma 4용 mmproj 를 지정 → 스왑 없이 한 서버가 텍스트+
+    #      이미지를 모두 처리(MiniCPM 불필요). 권장.
+    #  (B) 분리형(레거시): visionModel=MiniCPM-V gguf, visionMmproj=MiniCPM mmproj →
+    #      요청에 따라 text↔vision 서버를 재기동(스왑).
+    "visionModel": "",      # (A) Gemma 4 gguf(=textModel)  또는  (B) MiniCPM-V gguf
+    "visionMmproj": "",     # (A) Gemma 4 mmproj            또는  (B) MiniCPM mmproj
     # 서버 파라미터
     "nCtx": 8192,
     "nGpuLayers": 0,        # GPU 오프로딩 레이어 수(0=CPU)
@@ -19,6 +25,14 @@ DEFAULT_CONFIG = {
     "nThreads": 0,          # 생성 스레드 수(0=llama.cpp 자동, 권장: 물리 코어 수)
     "flashAttn": "auto",    # Flash Attention: on|off|auto (어텐션 가속·KV 메모리↓)
     "useMlock": True,       # 모델을 RAM에 상주시켜 페이지폴트/스왑 방지
+    # ---- 저메모리 모드 ----
+    # 켜면: (1) mlock 해제  (2) 유휴 시 모델 언로드(메인 포함)  (3) 임베딩 양자화
+    #       모델 사용 권고 로그. 저사양(16GB급)에서 상주 메모리를 크게 줄인다
+    #       (품질 손실 없음. 유휴 후 첫 요청은 재로딩으로 수 초 지연).
+    "lowMemory": False,
+    # 유휴 언로드 대기(초). 0=사용 안 함. lowMemory=True 이고 값이 0이면 300초 적용.
+    # (lowMemory 없이 값만 >0 이면 보조 서버(embed/whisper)만 언로드, 메인은 유지)
+    "idleUnloadSec": 0,
     # 캐시 DB
     "dbPath": "",           # 비우면 사용자 데이터 경로에 leva-cache.db
     # PDF 처리

@@ -69,28 +69,66 @@ def _norm_keywords(kws):
     return [str(k).strip() for k in (kws or []) if str(k).strip()]
 
 
+def _strip_fences(text):
+    """마크다운 코드펜스(```json ... ```)를 제거한다."""
+    if not text:
+        return text
+    t = re.sub(r"```[a-zA-Z0-9_-]*", "", str(text))  # 여는 펜스 + 언어태그
+    return t.replace("```", "").strip()
+
+
+def _looks_like_json(s):
+    """요약 자리에 JSON/펜스가 잘못 들어갔는지 판별(저사양 모델 오출력 방지)."""
+    if not s:
+        return False
+    t = str(s).strip()
+    if "```" in t:
+        return True
+    if t[:1] in "{[" and re.search(r'["\']?(keywords|summary)["\']?\s*:', t):
+        return True
+    return False
+
+
+def _clean_summary(s):
+    """요약 문자열 정제. JSON/펜스가 섞였으면 진짜 summary만 건지거나 버린다.
+    (살릴 수 없는 JSON 덩어리를 요약으로 그대로 노출하지 않는 것이 핵심)"""
+    if s is None:
+        return ""
+    s = _strip_fences(s).strip()
+    if _looks_like_json(s):
+        inner = _extract_json_obj(s)  # summary가 JSON 안에 중첩된 경우 한 번 더 파싱
+        if inner is not None and isinstance(inner.get("summary"), str):
+            cand = _strip_fences(inner["summary"]).strip()
+            if cand and not _looks_like_json(cand):
+                return cand
+        return ""  # raw JSON 노출 금지 — 빈 요약이 낫다
+    return s
+
+
 def parse_result(raw):
-    """모델 응답에서 keywords/summary 추출. 사고 과정·잘린 JSON에 견고하게."""
+    """모델 응답에서 keywords/summary 추출. 사고 과정·펜스·잘린/중첩 JSON에 견고."""
     if not raw:
         return [], ""
-    text = _strip_thinking(raw)
+    text = _strip_fences(_strip_thinking(raw))
 
     # 1) 균형 JSON 객체 파싱
     obj = _extract_json_obj(text)
     if obj is not None:
-        return _norm_keywords(obj.get("keywords")), str(obj.get("summary") or "").strip()
+        return _norm_keywords(obj.get("keywords")), _clean_summary(obj.get("summary"))
 
-    # 2) JSON이 깨졌거나 잘린 경우 정규식으로 keywords/summary 건져내기
+    # 2) JSON이 깨졌거나 잘린 경우 정규식으로 건져내기(닫는 괄호 없어도 대응)
     kws = []
-    mk = re.search(r'"keywords"\s*:\s*\[(.*?)\]', text, re.DOTALL)
+    mk = re.search(r'"keywords"\s*:\s*\[([^\]]*)\]?', text, re.DOTALL)
     if mk:
         kws = _norm_keywords([p.strip().strip('"\'') for p in mk.group(1).split(",")])
     ms = re.search(r'"summary"\s*:\s*"([^"]*)"', text, re.DOTALL)
-    summary = ms.group(1).strip() if ms else ""
+    summary = _clean_summary(ms.group(1)) if ms else ""
     if kws or summary:
         return kws, summary
 
-    # 3) 최후 폴백: 앞부분을 요약으로
+    # 3) 최후 폴백: JSON/펜스 잔재는 요약으로 노출하지 않는다(빈 요약이 raw보다 낫다)
+    if _looks_like_json(text):
+        return [], ""
     return [], text.strip()[:300]
 
 
@@ -105,40 +143,102 @@ PROMPT_ITER = (
     "당신은 문서 색인 비서입니다. 긴 문서 '{name}' 전체에서 균등하게 발췌한 "
     "조각들을 순서대로 읽고 있습니다(조각 사이 내용은 생략돼 있음).\n"
     "지금까지 정리한 키워드: {prev}\n"
-    "아래는 {i}/{n} 번째 조각입니다. 이 조각의 내용을 반영해 "
-    "키워드 목록을 갱신하세요(기존 키워드는 유지하고, 새로 필요한 것을 추가·보완). "
-    "그리고 지금까지 읽은 내용 전체를 아우르는 요약을 갱신하세요"
-    "({summary_len}. 인물·사건·주제 등 핵심을 담을 것).\n"
+    "[지금까지 요약]\n{prev_summary}\n"
+    "아래 {i}/{n} 번째 조각을 반영해 키워드 목록을 갱신하고(기존 유지+추가), "
+    "위 요약을 확장·보완하세요(기존 내용은 유지하고 새 내용을 덧붙일 것, "
+    "{summary_len}. 인물·사건·주제 등 핵심을 담을 것).\n"
     "JSON으로만 답하세요. 형식: {{\"keywords\": [\"...\", \"...\"], \"summary\": \"...\"}}\n"
     "키워드는 개수 제한 없이 한국어로. 다른 말은 하지 마세요.\n\n"
     "[조각 {i}/{n}]\n{body}"
 )
 
 
+# 회의록 고정 템플릿 — 저사양 모델은 "어떤 구조로 쓸지" 스스로 판단하는 걸
+# 가장 어려워하므로, 채울 자리(마커)를 고정해 빈칸만 메우게 한다.
+# 마커 ①②③④ 는 meeting.html splitSummary 가, ' · ' 구분은 splitItems 가 파싱한다.
+# (실시간 증분 요약과 종료 후 최종 정리가 이 템플릿을 공유한다)
+MEETING_TEMPLATE = (
+    "①개요 · <회의/강의 전체를 2~3문장으로 요약>\n"
+    "②핵심 내용 · <다룬 주제마다 '주제: 무엇을 왜 어떻게'를 2~4문장으로 상세히. 여러 주제면 ' · ' 로 구분>\n"
+    "③결정사항 · <합의·결정된 것. 없으면 해당 없음>\n"
+    "④액션아이템 · <담당자: 할 일 (기한). 없으면 해당 없음>\n"
+    "⑤미결 이슈 · <결론 못 낸 것. 없으면 해당 없음>"
+)
+
+# 형식을 눈으로 보여 주는 채워진 예시(few-shot). ' · ' 로 항목/주제를 구분한다.
+# ②핵심 내용을 실제로 상세하게 채운 예시로, 약한 모델이 '뭉뚱그리지 않는' 기준을 잡게 한다.
+MEETING_EXAMPLE = (
+    "①개요 · 티켓 구매 시스템에서 생기는 동시성 버그 두 가지와 데이터베이스 차원의 해결책을 설명함. "
+    "②핵심 내용 · 레이스 컨디션: 두 사용자가 거의 동시에 남은 재고를 읽고 각자 1을 빼서, 재고가 하나뿐인데 같은 티켓이 두 번 팔림 · "
+    "부분 쓰기: 재고 차감은 됐는데 주문 생성 전에 서버가 죽으면 티켓이 사라짐 · "
+    "원자적 연산: 재고>0일 때만 차감하는 단일 UPDATE로 읽기-쓰기 간극을 없애 레이스 컨디션 해결 · "
+    "트랜잭션: 여러 작업을 묶어 전부 성공 아니면 전부 롤백해 부분 쓰기 방지 · "
+    "로우 락(SELECT FOR UPDATE): 한 행을 잠가 다른 요청이 끝날 때까지 읽기·쓰기를 막음 "
+    "③결정사항 · 해당 없음 ④액션아이템 · 해당 없음 ⑤미결 이슈 · 해당 없음"
+)
+
+MEETING_RULES = (
+    "규칙: 전사에 실제로 나온 내용만, 추측·창작은 절대 금지. 각 섹션 항목은 ' · ' 로 구분. "
+    "②핵심 내용은 최대한 구체적으로(주제마다 예시·메커니즘까지 풀어서) 쓰고 한 줄로 뭉뚱그리지 말 것. "
+    "결정·액션·미결이 없으면 그 섹션에 '해당 없음' 이라고만 쓰세요. "
+    "summary 는 다섯 마커(①②③④⑤)를 이 순서 그대로 포함해야 합니다."
+)
+
 PROMPT_ITER_MEETING = (
-    "당신은 회의록 작성 비서입니다. 회의 녹음의 전사본(타임스탬프 포함) "
-    "'{name}' 을 여러 조각으로 나눠 순서대로 읽고 있습니다.\n"
-    "지금까지 정리한 키워드: {prev}\n"
-    "아래는 {i}/{n} 번째 조각입니다. 키워드 목록을 갱신하고"
-    "(참석자·프로젝트명·핵심 주제 위주), 지금까지 내용 전체를 아우르는 "
-    "회의 요약을 갱신하세요. 요약에 반드시 담을 것: ①주요 안건 ②결정사항 "
-    "③액션아이템(담당자·기한이 언급됐으면 함께) ④미결 이슈. "
-    "전사에 없는 내용은 절대 지어내지 마세요.\n"
+    "당신은 회의록 작성 비서입니다. 회의/강의 전사본 '{name}' 을 여러 조각으로 나눠 "
+    "순서대로 읽고 있습니다.\n"
+    "[지금까지 작성한 회의록]\n{prev_summary}\n\n"
+    "아래 {i}/{n} 번째 조각을 반영해 회의록을 갱신하세요. 기존 내용은 반드시 유지하면서 "
+    "새 내용을 덧붙이고(앞 조각 내용을 절대 지우지 말 것), 키워드도 갱신하세요"
+    "(참석자·핵심 용어). 지금까지 키워드: {prev}\n"
+    "요약은 반드시 아래 템플릿의 다섯 섹션을 이 순서·이 마커 그대로 채웁니다:\n"
+    "{template}\n"
+    "{rules}\n"
+    "예시 summary: \"{example}\"\n"
     "JSON으로만 답하세요. 형식: {{\"keywords\": [\"...\", \"...\"], \"summary\": \"...\"}}\n"
     "키워드는 한국어로. 다른 말은 하지 마세요.\n\n"
     "[조각 {i}/{n}]\n{body}"
 )
 
 
-def build_iter_prompt(name, prev_keywords, body, i, n, mode="doc"):
+def build_iter_prompt(name, prev_keywords, prev_summary, body, i, n, mode="doc"):
     prev = ", ".join(prev_keywords) if prev_keywords else "(아직 없음)"
+    ps = prev_summary or "(아직 없음)"
     if mode == "meeting":
-        return PROMPT_ITER_MEETING.format(prev=prev, name=name, i=i, n=n,
+        return PROMPT_ITER_MEETING.format(prev=prev, prev_summary=ps, name=name, i=i, n=n,
+                                          template=MEETING_TEMPLATE,
+                                          example=MEETING_EXAMPLE,
+                                          rules=MEETING_RULES,
                                           body=body or "(빈 조각)")
     # 조각이 여럿인 긴 문서는 한두 문장으로는 전체를 담을 수 없다
-    summary_len = "4~6문장" if n > 1 else "한두 문장"
-    return PROMPT_ITER.format(prev=prev, name=name, i=i, n=n,
+    summary_len = "6~10문장" if n > 1 else "3~6문장"
+    return PROMPT_ITER.format(prev=prev, prev_summary=ps, name=name, i=i, n=n,
                               summary_len=summary_len, body=body or "(빈 조각)")
+
+
+# 실시간(증분) 회의록 — 회의 도중 주기적으로 "지금까지 회의록 + 새 발화"를 주고
+# 갱신본을 받는다. 종료 후 정리와 같은 템플릿을 공유해 형식을 일치시킨다.
+PROMPT_LIVE_MINUTES = (
+    "당신은 회의록을 실시간으로 갱신하는 비서입니다.\n"
+    "아래는 지금까지 작성된 회의록 초안과, 방금 새로 나온 발화입니다.\n"
+    "새 발화를 반영해 회의록을 갱신하세요(기존 항목은 유지·보완하고, 새 내용을 추가).\n"
+    "요약은 반드시 아래 템플릿의 다섯 섹션을 이 순서·이 마커 그대로 채웁니다:\n"
+    "{template}\n"
+    "{rules}\n"
+    "예시 summary: \"{example}\"\n"
+    "JSON으로만 답하세요. 형식: {{\"keywords\": [\"...\"], \"summary\": \"...\"}}\n"
+    "키워드는 한국어로. 다른 말은 하지 마세요.\n\n"
+    "[지금까지 회의록 초안]\n{current}\n\n[새 발화]\n{delta}"
+)
+
+
+def build_live_minutes_prompt(current_minutes, delta):
+    """실시간 증분 회의록 갱신 프롬프트. current_minutes(현재 요약)와
+    delta(새로 확정된 발화 묶음)를 주고 갱신본을 요청한다."""
+    return PROMPT_LIVE_MINUTES.format(
+        template=MEETING_TEMPLATE, rules=MEETING_RULES, example=MEETING_EXAMPLE,
+        current=(current_minutes or "(아직 없음)"),
+        delta=(delta or "(없음)"))
 
 
 def split_body(body, size):
@@ -195,7 +295,7 @@ def run_text_extraction(chat, name, body, *, chunk_size=2000, max_parts=12,
     for idx, chunk in enumerate(chunks, 1):
         if on_progress:
             on_progress(idx, n)
-        raw = chat(build_iter_prompt(name, keywords, chunk, idx, n, mode=mode))
+        raw = chat(build_iter_prompt(name, keywords, summary, chunk, idx, n, mode=mode))
         kws, s = parse_result(raw)
         keywords = merge_keywords(keywords, kws)
         if s:

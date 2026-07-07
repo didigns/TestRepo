@@ -101,22 +101,33 @@ def _install_kill_on_close_job():
 
         job = k32.CreateJobObjectW(None, None)
         if not job:
+            _log(f"[job] CreateJobObjectW 실패 err={ctypes.get_last_error()} "
+                 "— 자동 정리 비활성(main.js taskkill 백업에 의존)")
             return
         info = _ExtendedLimits()
         info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-        ok = k32.SetInformationJobObject(
+        if not k32.SetInformationJobObject(
             job, JobObjectExtendedLimitInformation,
             ctypes.byref(info), ctypes.sizeof(info),
-        )
-        if ok:
-            # 자신을 잡에 넣으면 이후 생성되는 자식(llama-server)이 자동 편입된다.
-            ok = k32.AssignProcessToJobObject(job, k32.GetCurrentProcess())
-        if not ok:
+        ):
+            _log(f"[job] SetInformationJobObject 실패 err={ctypes.get_last_error()}")
+            k32.CloseHandle(job)
+            return
+        # 자신을 잡에 넣으면 이후 생성되는 자식(llama-server)이 자동 편입된다.
+        if not k32.AssignProcessToJobObject(job, k32.GetCurrentProcess()):
+            err = ctypes.get_last_error()
+            # ERROR_ACCESS_DENIED(5): 이미 다른 Job(예: Electron)에 속해 있고
+            # 중첩 Job 이 허용되지 않는 환경. OS 자동 정리가 보장되지 않으므로
+            # main.js 의 taskkill 회수 경로(재시작/종료)에 의존해야 한다.
+            _log(f"[job] AssignProcessToJobObject 실패 err={err} "
+                 "— 이미 다른 Job에 속했을 수 있음(자동 정리 비활성, taskkill 백업 의존)")
             k32.CloseHandle(job)
             return
         _JOB_HANDLE = job
-    except Exception:
-        pass  # 실패해도 워커 기능 자체는 정상 동작(자동 정리만 보장 안 됨)
+        _log("[job] KILL_ON_JOB_CLOSE 활성화 — 워커 종료 시 자식(llama/whisper) 자동 정리")
+    except Exception as e:
+        # 실패해도 워커 기능 자체는 정상 동작(자동 정리만 보장 안 됨)
+        _log(f"[job] 설정 예외: {e}")
 
 
 def _emit(msg):
@@ -165,10 +176,59 @@ class CacheAgent:
         self.pause_ev = threading.Event()
         # 멀티턴 대화 히스토리: (질문, 답변) 최근 6턴 — 후속 질문 맥락용
         self.chat_history = []
+        # 유휴 언로드용 활동 추적: in-flight 작업이 0이고 last_active 로부터
+        # idleUnloadSec 이 지나야 워치독이 모델을 내린다(긴 작업 중엔 언로드 안 함).
+        self._inflight = 0
+        self._inflight_lock = threading.Lock()
+        self.last_active = time.time()
 
     def close(self):
         self.llama.stop()
         self.whisper.stop()
+
+    # ---- 유휴 언로드(저메모리) 지원 ----------------------------------
+    def _enter(self):
+        """모델을 쓰는 작업 시작 — 이 동안은 워치독이 언로드하지 않는다."""
+        with self._inflight_lock:
+            self._inflight += 1
+
+    def _leave(self):
+        """작업 종료 — 유휴 타이머를 지금부터 다시 센다."""
+        with self._inflight_lock:
+            self._inflight = max(0, self._inflight - 1)
+            self.last_active = time.time()
+
+    def _is_idle(self, secs):
+        with self._inflight_lock:
+            if self._inflight > 0:
+                return False
+            return (time.time() - self.last_active) >= secs
+
+    def unload_idle(self, include_main=False):
+        """유휴 시 상주 서버를 내려 메모리를 회수한다. embed/whisper 는 항상,
+        메인(Gemma)은 include_main=True(저메모리 모드)일 때만. 내려도 다음
+        요청 시 lazy 로 자동 재기동된다."""
+        freed = []
+        try:
+            if self.llama._embed_alive():
+                self.llama.restart("embed"); freed.append("embed")
+        except Exception:
+            pass
+        try:
+            if self.whisper._alive():
+                self.whisper.stop(); freed.append("whisper")
+        except Exception:
+            pass
+        if include_main:
+            try:
+                if self.llama._alive():
+                    self.llama.restart("main"); freed.append("main")
+            except Exception:
+                pass
+        if freed:
+            _log("유휴 언로드: " + ", ".join(freed)
+                 + " → 메모리 회수(다음 요청 시 자동 재로딩)")
+        return bool(freed)
 
     def _pause_wait(self):
         """일시정지 동안 대기. 대화(chat)는 계속 서비스한다."""
@@ -763,6 +823,7 @@ class CacheAgent:
             except queue.Empty:
                 return
             rid = msg.get("id")
+            self._enter()
             try:
                 t0 = time.time()
                 first = [0.0]  # 첫 토큰 시각 (TTFT 측정)
@@ -785,6 +846,8 @@ class CacheAgent:
             except Exception as e:
                 _log("chat 처리 실패: " + str(e))
                 _emit({"type": "result", "id": rid, "ok": False, "error": str(e)})
+            finally:
+                self._leave()
 
     def checkpoint(self):
         """Pipeline ctx 훅(선택): 파일 처리 사이마다 호출돼
@@ -847,14 +910,149 @@ def _whisper_warmup(agent, *, reload_cfg=False):
     threading.Thread(target=_go, daemon=True, name="whisper-warmup").start()
 
 
+def _suggest_embed_quant(cfg):
+    """저메모리 모드에서 임베딩 모델이 크면(F16 등) Q8_0 양자화를 권고(레버 2).
+    번들된 llama-quantize 로 한 번만 변환하면 ~0.5GB 상주 절감(품질 손실 거의 없음)."""
+    em = cfg.get("embedModel") or ""
+    if not em:
+        return
+    try:
+        big = os.path.isfile(em) and os.path.getsize(em) > 800 * 1024 * 1024
+    except Exception:
+        big = False
+    if big or "f16" in os.path.basename(em).lower():
+        out = os.path.join(os.path.dirname(em), "bge-m3-Q8_0.gguf")
+        _log("[저메모리] 임베딩 모델이 큽니다(F16). Q8_0 변환 권장 "
+             "(품질 손실 거의 없음, ~0.5GB 절감):")
+        _log(f'    llama-quantize "{em}" "{out}" Q8_0')
+        _log("    변환 후 설정 → 모델에서 임베딩 모델을 위 파일로 지정하세요.")
+
+
+def _start_idle_watchdog(agent):
+    """유휴 언로드 워치독. in-flight 작업이 0이고 idleUnloadSec 이 지나면
+    상주 서버를 내린다. lowMemory=True 면 메인(Gemma)까지, 아니면 보조만."""
+    low = bool(agent.cfg.get("lowMemory"))
+    secs = int(agent.cfg.get("idleUnloadSec", 0) or 0)
+    if secs <= 0 and low:
+        secs = 300  # 저메모리 모드 기본 5분
+    if low:
+        _suggest_embed_quant(agent.cfg)
+    if secs <= 0:
+        return
+
+    def _loop():
+        while True:
+            time.sleep(15)
+            try:
+                if agent._is_idle(secs):
+                    agent.unload_idle(include_main=low)
+            except Exception as e:
+                _log("유휴 워치독 오류: " + str(e))
+
+    threading.Thread(target=_loop, daemon=True, name="idle-unload").start()
+    _log(f"유휴 언로드 활성: {secs}s (메인 포함={low})")
+
+
+class LiveMinutes:
+    """실시간(증분) 회의록 엔진.
+
+    LiveSTT 가 뱉는 '확정 발화(final)'를 모아 두고, 일정 주기(liveMinutesSec)마다
+    '지금까지 회의록 + 새 발화'를 Gemma 에 주어 회의록을 갱신한다. stdin 루프를
+    막지 않도록 전용 타이머 스레드에서 돌고, 한 번에 한 요청만(coalesce) 처리한다.
+    결과는 live-minutes 이벤트로 emit → meeting.html 이 상단에 렌더한다.
+    """
+
+    def __init__(self, agent, emit, log):
+        self.agent = agent
+        self.emit = emit
+        self.log = log
+        self.lock = threading.Lock()
+        self.pending = []      # 아직 요약에 반영 못 한 확정 발화들
+        self.minutes = ""      # 현재까지의 회의록(요약 문자열, ①②③④ 형식)
+        self.busy = False      # 모델 호출 중이면 이번 주기는 건너뜀
+        self.stop_ev = threading.Event()
+        self.enabled = bool(agent.cfg.get("liveMinutesEnable", True))
+        # 최소 15초 하한(너무 잦으면 모델이 못 따라오고 자원 낭비)
+        self.interval = max(15, int(agent.cfg.get("liveMinutesSec", 40) or 40))
+        self.th = None
+
+    def start(self):
+        if not self.enabled:
+            self.log("실시간 회의록 비활성(liveMinutesEnable=false)")
+            return
+        self.th = threading.Thread(target=self._loop, daemon=True,
+                                   name="live-minutes")
+        self.th.start()
+        self.log(f"실시간 회의록 시작(주기 {self.interval}s)")
+
+    def add_final(self, text):
+        text = (text or "").strip()
+        if not text:
+            return
+        with self.lock:
+            self.pending.append(text)
+
+    def _take_delta(self):
+        with self.lock:
+            if not self.pending:
+                return ""
+            delta = " ".join(self.pending)
+            self.pending = []
+            return delta
+
+    def _loop(self):
+        # stop_ev.wait 가 interval 후 False 를 반환하면 1회 갱신.
+        while not self.stop_ev.wait(self.interval):
+            try:
+                self._update_once()
+            except Exception as e:
+                self.log("실시간 회의록 오류: " + str(e))
+
+    def _update_once(self):
+        if self.busy:
+            return
+        delta = self._take_delta()
+        if not delta:
+            return
+        self.busy = True
+        try:
+            self.emit({"type": "live-minutes", "working": True})
+            # Gemma(main/text)가 유휴 언로드됐거나 아직 안 떠 있을 수 있으니
+            # 호출 전에 반드시 기동을 보장한다(없으면 연결 거부 WinError 10061).
+            self.agent.llama.ensure_model("text")
+            prompt = summarize.build_live_minutes_prompt(self.minutes, delta)
+            out = self.agent.llama.chat(prompt, max_tokens=900) or ""
+            _kw, mins = summarize.parse_result(out)
+            if mins:
+                self.minutes = mins
+                self.emit({"type": "live-minutes", "minutes": mins,
+                           "working": False})
+            else:
+                self.emit({"type": "live-minutes", "working": False})
+        finally:
+            self.busy = False
+
+    def stop(self):
+        """타이머를 멈추고, 남은 발화가 있으면 마지막으로 1회 갱신한다."""
+        self.stop_ev.set()
+        try:
+            self._update_once()
+        except Exception as e:
+            self.log("실시간 회의록 종료 갱신 오류: " + str(e))
+
+
 def run_daemon(agent, db_path):
     # 지원 확장자를 함께 알려 Electron 쪽 필터가 이 목록을 그대로 쓰게 한다
     # (JS·Python 이중 정의로 인한 드리프트 방지 — 소스는 router 하나)
     _emit({"type": "ready",
            "exts": sorted(router.TEXT_EXTS | router.IMAGE_EXTS
                           | router.PDF_EXTS | router.AUDIO_EXTS)})
-    # 회의용 whisper 서버는 상시 기동(설정돼 있을 때) — 실시간 전사 즉시 시작
-    _whisper_warmup(agent)
+    # whisper.cpp(배치 파일 전사)는 상시 기동하지 않는다 — 라이브 자막은
+    # faster-whisper(별개 엔진)가 담당하므로, 두 음성 모델이 동시에 상주하면
+    # 저사양(16GB)에서 메모리가 터진다. 파일 전사가 필요할 때 lazy 로 기동된다.
+    # (필요 시 설정에서 warmup을 켜는 것도 가능 — 기본은 지연 로드)
+    if agent.cfg.get("whisperWarmup"):
+        _whisper_warmup(agent)
     # 경량 명령 전용 연결 — 중량 스레드(agent.conn)와 분리된 별도 연결이라
     # WAL 모드에서 서로 차단 없이 동시에 읽고 쓸 수 있다.
     lconn = dbmod.connect(db_path)
@@ -871,10 +1069,15 @@ def run_daemon(agent, db_path):
                 continue
             if m is None:
                 return
-            _handle_heavy(agent, m)
+            agent._enter()
+            try:
+                _handle_heavy(agent, m)
+            finally:
+                agent._leave()
 
     th = threading.Thread(target=heavy_loop, daemon=True, name="cache-heavy")
     th.start()
+    _start_idle_watchdog(agent)
     try:
         for line in sys.stdin:
             line = line.strip()
@@ -918,8 +1121,29 @@ def run_daemon(agent, db_path):
                                 _emit({"type": "result", "id": _rid, "ok": True,
                                        "mode": "stream"})
                                 return
+                            # 라이브 세션 동안 배치 whisper.cpp 서버는 내려 메모리를
+                            # 양보한다(라이브는 faster-whisper가 담당). 회의 후
+                            # 녹음 파일 전사 때 whisper.transcribe가 lazy 재기동.
+                            try:
+                                agent.whisper.stop()
+                            except Exception:
+                                pass
                             from .live_stt import LiveSTT
-                            agent.live = LiveSTT(agent.cfg, _emit, _log)
+                            # 실시간 회의록: 확정 발화(final)를 가로채 요약 엔진에 넣고
+                            # 원래대로 UI 로도 forward 한다.
+                            lm = LiveMinutes(agent, _emit, _log)
+
+                            def _live_emit(m, _lm=lm):
+                                try:
+                                    if m.get("type") == "live-text" and m.get("final"):
+                                        _lm.add_final(m["final"])
+                                except Exception:
+                                    pass
+                                _emit(m)
+
+                            agent.live = LiveSTT(agent.cfg, _live_emit, _log)
+                            agent.live_minutes = lm
+                            lm.start()
                             _emit({"type": "result", "id": _rid, "ok": True,
                                    "mode": "stream", "device": agent.live.device})
                         except ImportError:
@@ -941,6 +1165,12 @@ def run_daemon(agent, db_path):
                 elif t == "live-stop":
                     live = getattr(agent, "live", None)
                     agent.live = None
+                    lm = getattr(agent, "live_minutes", None)
+                    agent.live_minutes = None
+                    if lm:
+                        # 타이머 정지 + 남은 발화로 마지막 갱신(스레드로 — stdin 비차단)
+                        threading.Thread(target=lm.stop, daemon=True,
+                                         name="live-minutes-stop").start()
                     if live:
                         # 꼬리 확정(final emit)까지 스레드로 — stdin을 막지 않는다
                         threading.Thread(target=live.stop, daemon=True,
