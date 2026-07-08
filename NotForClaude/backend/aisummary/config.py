@@ -20,6 +20,7 @@ DB_DIR = DATA_DIR / "lancedb"
 MODELS_CACHE = DATA_DIR / "models"
 MEETINGS_DIR = DATA_DIR / "meetings"
 SESSIONS_DIR = DATA_DIR / "sessions"
+PLUGINS_DIR = DATA_DIR / "plugins"
 CONFIG_PATH = DATA_DIR / "config.json"
 
 
@@ -109,7 +110,7 @@ class Settings:
 
 
 def ensure_dirs() -> None:
-    for d in (DATA_DIR, DB_DIR, MODELS_CACHE, MEETINGS_DIR, SESSIONS_DIR):
+    for d in (DATA_DIR, DB_DIR, MODELS_CACHE, MEETINGS_DIR, SESSIONS_DIR, PLUGINS_DIR):
         d.mkdir(parents=True, exist_ok=True)
 
 

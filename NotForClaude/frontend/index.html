@@ -299,6 +299,29 @@
     display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;flex-shrink:0;}
   .qbar input{flex:1;border:0;outline:0;background:transparent;color:var(--text);font-size:18px;padding:16px 0;}
   .qbar .qstat{font-size:12px;color:var(--muted);white-space:nowrap;flex-shrink:0;}
+  /* home / launcher view */
+  #view-home{overflow-y:auto;}
+  .home{max-width:720px;margin:0 auto;padding:52px 28px 40px;}
+  .home-hi{font-size:26px;font-weight:700;color:var(--text);}
+  .home-sub{color:var(--text2);font-size:13px;margin-top:8px;line-height:1.6;}
+  .home-ask{display:flex;align-items:center;gap:10px;border:1px solid var(--border);border-radius:16px;
+    padding:9px 9px 9px 18px;background:var(--panel);margin:22px 0 4px;box-shadow:0 8px 28px rgba(0,0,0,.07);}
+  .home-ask input{flex:1;border:0;outline:0;background:transparent;color:var(--text);font-size:15px;}
+  .home-sec{font-size:11px;color:var(--text2);font-weight:600;margin:28px 0 10px;letter-spacing:.02em;}
+  .home-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;}
+  .hcard{border:1px solid var(--border);border-radius:12px;padding:14px;background:var(--panel);cursor:pointer;transition:border-color .15s,transform .1s;}
+  .hcard:hover{border-color:var(--accent);transform:translateY(-1px);}
+  .hcard .ic{font-size:20px;line-height:1;}
+  .hcard .t{font-size:13px;font-weight:600;margin-top:9px;color:var(--text);}
+  .hcard .d{font-size:11px;color:var(--text2);margin-top:3px;line-height:1.45;overflow:hidden;text-overflow:ellipsis;}
+  .home-recent .rrow{display:flex;align-items:center;gap:8px;padding:9px 11px;border:1px solid var(--border);border-radius:9px;margin-bottom:6px;cursor:pointer;font-size:12px;color:var(--text);}
+  .home-recent .rrow:hover{background:var(--border);}
+  .home-recent .empty2{color:var(--muted);font-size:12px;padding:6px 2px;}
+  .home-stats{display:flex;gap:10px;margin-top:24px;flex-wrap:wrap;}
+  .hstat{flex:1;min-width:110px;border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--panel2);}
+  .hstat .n{font-size:18px;font-weight:700;color:var(--text);}
+  .hstat .l{font-size:10px;color:var(--text2);margin-top:2px;}
+  .nav{flex-wrap:wrap;}
 </style>
 </head>
 <body>
@@ -314,7 +337,8 @@
     </div>
     <span class="badge">🔒 100% 로컬 · 오프라인</span>
     <div class="nav">
-      <button class="navbtn active" data-view="chat" onclick="switchView('chat')">문서 Q&amp;A</button>
+      <button class="navbtn active" data-view="home" onclick="switchView('home')">홈</button>
+      <button class="navbtn" data-view="chat" onclick="switchView('chat')">문서 Q&amp;A</button>
       <button class="navbtn" data-view="meeting" onclick="switchView('meeting')">회의</button>
     </div>
     <div id="kb-docs">
@@ -359,7 +383,24 @@
   <!-- CENTER -->
   <div class="col chat">
     <!-- view: chat -->
-    <div id="view-chat" class="col" style="flex:1;min-height:0;">
+    <!-- view: home (launcher) -->
+    <div id="view-home" class="col" style="flex:1;min-height:0;">
+      <div class="home">
+        <div class="home-hi">안녕하세요 👋</div>
+        <div class="home-sub">무엇을 도와드릴까요? 모든 답변은 내 문서를 근거로, 100% 로컬에서 처리됩니다.</div>
+        <div class="home-ask">
+          <input id="homeq" placeholder="내 문서에 대해 무엇이든 물어보세요…" onkeydown="if(event.key==='Enter')homeAsk()" />
+          <button class="send" onclick="homeAsk()">↑</button>
+        </div>
+        <div class="home-sec">바로가기</div>
+        <div class="home-cards" id="homeCards"></div>
+        <div class="home-sec">최근 대화</div>
+        <div class="home-recent" id="homeRecent"></div>
+        <div class="home-stats" id="homeStats"></div>
+      </div>
+    </div>
+    <!-- view: chat -->
+    <div id="view-chat" class="col hidden" style="flex:1;min-height:0;">
       <div class="thread" id="thread">
         <div class="empty">내 문서에 대해 무엇이든 물어보세요.<br>답변은 항상 내 파일을 근거로 인용과 함께 제공됩니다.</div>
       </div>
@@ -403,6 +444,17 @@
         <button id="mstop" class="mbtn stop" onclick="stopMeeting()" disabled>■ 종료 &amp; 요약</button>
       </div>
     </div>
+    <!-- view: plugin (dynamic modes contributed by plugins) -->
+    <div id="view-plugin" class="col hidden" style="flex:1;min-height:0;">
+      <div class="thread" id="pthread"><div class="empty">플러그인</div></div>
+      <div class="composer">
+        <div class="cbox">
+          <input id="pq" placeholder="질문…" onkeydown="if(event.key==='Enter')pluginAsk()" />
+          <span class="modelchip" id="pchip">플러그인</span>
+          <button class="send" id="psendbtn" onclick="pluginAsk()">↑</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- RIGHT: source preview -->
@@ -426,6 +478,7 @@
       <button class="stab-btn" data-t="rag" onclick="sTab('rag')">검색</button>
       <button class="stab-btn" data-t="meet" onclick="sTab('meet')">회의</button>
       <button class="stab-btn" data-t="bots" onclick="sTab('bots')">봇</button>
+      <button class="stab-btn" data-t="plugins" onclick="sTab('plugins')">플러그인</button>
       <button class="stab-btn" data-t="general" onclick="sTab('general')">일반</button>
     </div>
     <div class="scard-b">
@@ -523,6 +576,16 @@
         <div style="text-align:right;margin-top:8px;"><button class="tinybtn" onclick="restartBots()">봇 다시 시작</button></div>
       </div>
 
+      <div class="stab hidden" id="stab-plugins">
+        <div class="shint">플러그인은 100% 로컬에서 동작하고 <b>네트워크 접근이 기본 차단</b>됩니다. 켜면 왼쪽 상단에 전용 모드가 생겨요.</div>
+        <div style="display:flex;gap:6px;margin:10px 0 4px;">
+          <button class="tinybtn" onclick="loadPlugins()">↻ 새로고침</button>
+          <button class="tinybtn" onclick="openPluginsFolder()">📁 플러그인 폴더 열기</button>
+        </div>
+        <div class="shint" style="margin:0 0 6px;">폴더에 <code>plugin.json</code>이 든 플러그인 폴더를 넣고 새로고침하면 목록에 나타납니다.</div>
+        <div id="pluginList"><div class="shint">불러오는 중…</div></div>
+      </div>
+
       <div class="stab hidden" id="stab-general">
         <div class="sglab">테마</div>
         <div class="themes" id="themeGrid"></div>
@@ -610,6 +673,7 @@ async function loadKB(){
       : `<span style="color:var(--ok)">●</span> 최신 상태`;
     renderKB();
     scheduleKbPoll();
+    maybeRenderHome();
   }catch(e){ el('kbstat').textContent='백엔드 연결 안 됨'; }
 }
 function renderKB(){
@@ -681,7 +745,7 @@ let citeSets=[];          // per-saved-answer citation arrays (for reloaded conv
 let _dragSid=null;
 
 async function loadSessions(){
-  try{ const r=await api('/sessions/list'); if(r.ok){ SESS=await r.json(); renderSessions(); } }
+  try{ const r=await api('/sessions/list'); if(r.ok){ SESS=await r.json(); renderSessions(); maybeRenderHome(); } }
   catch(e){}
 }
 function sessRowHtml(s){
@@ -1003,12 +1067,13 @@ function finishAnswer(body,full,ev){
   renderRefs();
   if(citeStore.length) openSource(0);
 }
-function addTurn(who,html){
+function addTurnTo(container,who,html){
   const d=document.createElement('div'); d.className='turn';
   d.innerHTML=`<span class="av ${who}">${who==='me'?'나':'O'}</span><div class="msg">${html}</div>`;
-  el('thread').appendChild(d); el('thread').scrollTop=el('thread').scrollHeight;
+  container.appendChild(d); container.scrollTop=container.scrollHeight;
   return d;
 }
+function addTurn(who,html){ return addTurnTo(el('thread'),who,html); }
 
 // ---- source preview ----
 let curSrc=null;
@@ -1189,6 +1254,7 @@ function sTab(t){
   document.querySelectorAll('.stab-btn').forEach(b=>b.classList.toggle('active',b.dataset.t===t));
   document.querySelectorAll('.stab').forEach(s=>s.classList.toggle('hidden', s.id!=='stab-'+t));
   if(t==='bots'){ refreshBots(); startBotPoll(); }
+  if(t==='plugins'){ loadPlugins(); }
 }
 async function loadModels(){
   try{ const r=await api('/models'); renderModels(await r.json()); }
@@ -1234,10 +1300,14 @@ async function updateTitle(){
 }
 function switchView(v){
   document.querySelectorAll('.navbtn').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
+  curPlugin=null;
+  if(el('view-home')) el('view-home').classList.toggle('hidden', v!=='home');
   el('view-chat').classList.toggle('hidden', v!=='chat');
   el('view-meeting').classList.toggle('hidden', v!=='meeting');
-  el('kb-docs').classList.toggle('hidden', v!=='chat');
+  if(el('view-plugin')) el('view-plugin').classList.add('hidden');
+  el('kb-docs').classList.toggle('hidden', v==='meeting');   // docs sidebar hidden only for meeting
   el('meeting-list').classList.toggle('hidden', v!=='meeting');
+  if(v==='home'){ renderHome(); closeSource(); }
   if(v==='meeting'){ closeSource(); loadMeetings(); initMeetingSettings(); }
 }
 async function loadMeetings(){
@@ -1555,6 +1625,133 @@ async function healthLoop(){
     if(!_serverDown){ _serverDown=true; el('netbanner').classList.remove('hidden'); }
   }
 }
+// ===== home (launcher) =====
+function maybeRenderHome(){ if(el('view-home') && !el('view-home').classList.contains('hidden')) renderHome(); }
+function renderHome(){
+  if(!el('homeCards')) return;
+  const cards=[
+    {ic:'💬',t:'문서 Q&A',d:'내 문서에 근거해 질문',act:()=>switchView('chat')},
+    {ic:'🎙️',t:'회의',d:'녹음·전사·요약',act:()=>switchView('meeting')},
+  ];
+  (PLUGINS||[]).filter(p=>p.enabled&&p.contributes&&p.contributes.mode).forEach(p=>{
+    const m=p.contributes.mode;
+    cards.push({ic:m.icon||'🧩',t:m.label||p.name,d:p.description||'',act:()=>openPluginMode(p.id)});
+  });
+  const cbox=el('homeCards');
+  cbox.innerHTML=cards.map((c,i)=>`<div class="hcard" data-i="${i}"><div class="ic">${c.ic}</div><div class="t">${esc(c.t)}</div><div class="d" title="${esc(c.d)}">${esc(c.d)}</div></div>`).join('');
+  [...cbox.querySelectorAll('.hcard')].forEach((n,i)=>n.onclick=cards[i].act);
+  const rec=(SESS.sessions||[]).slice(0,5);
+  el('homeRecent').innerHTML=rec.length?rec.map(s=>`<div class="rrow" onclick='openSessionFromHome(${JSON.stringify(s.session_id)})' title="${esc(s.preview||s.title)}">
+    <svg class="ico" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(s.title)}</span></div>`).join('')
+    :'<div class="empty2">아직 대화가 없어요. 위에서 질문을 시작해 보세요.</div>';
+  const ti=(KB.total_indexed!=null)?KB.total_indexed:(KB.total_files||0);
+  el('homeStats').innerHTML=
+    `<div class="hstat"><div class="n">${ti}/${KB.total_files||0}</div><div class="l">인덱싱된 파일</div></div>`+
+    `<div class="hstat"><div class="n">${(SESS.sessions||[]).length}</div><div class="l">대화</div></div>`+
+    `<div class="hstat"><div class="n">${(PLUGINS||[]).filter(p=>p.enabled).length}</div><div class="l">활성 플러그인</div></div>`;
+}
+function homeAsk(){
+  const q=el('homeq').value.trim(); if(!q) return;
+  el('homeq').value='';
+  switchView('chat'); newSession();
+  el('q').value=q; ask();
+}
+function openSessionFromHome(sid){ switchView('chat'); openSession(sid); }
+
+// ===== plugins (declarative local modes) =====
+let PLUGINS=[], curPlugin=null;
+async function loadPlugins(){
+  try{ const r=await api('/plugins/list'); if(!r.ok) return;
+    PLUGINS=(await r.json()).plugins||[]; renderPluginNav(); renderPluginSettings(); maybeRenderHome();
+  }catch(e){}
+}
+function renderPluginNav(){
+  const nav=document.querySelector('.nav'); if(!nav) return;
+  nav.querySelectorAll('.navbtn.plugin').forEach(b=>b.remove());
+  PLUGINS.filter(p=>p.enabled && p.contributes && p.contributes.mode).forEach(p=>{
+    const mode=p.contributes.mode;
+    const b=document.createElement('button');
+    b.className='navbtn plugin'+(curPlugin===p.id?' active':'');
+    b.dataset.view='plugin:'+p.id;
+    b.textContent=(mode.icon?mode.icon+' ':'')+(mode.label||p.name);
+    b.onclick=()=>openPluginMode(p.id);
+    nav.appendChild(b);
+  });
+}
+function openPluginMode(id){
+  const p=PLUGINS.find(x=>x.id===id); if(!p||!p.contributes||!p.contributes.mode) return;
+  curPlugin=id;
+  document.querySelectorAll('.navbtn').forEach(b=>b.classList.toggle('active', b.dataset.view==='plugin:'+id));
+  if(el('view-home')) el('view-home').classList.add('hidden');
+  el('view-chat').classList.add('hidden'); el('view-meeting').classList.add('hidden');
+  el('view-plugin').classList.remove('hidden');
+  el('kb-docs').classList.remove('hidden'); el('meeting-list').classList.add('hidden'); closeSource();
+  const mode=p.contributes.mode;
+  el('pq').placeholder=mode.placeholder||'질문…';
+  el('pchip').textContent=mode.label||p.name;
+  el('pthread').innerHTML=`<div class="empty">${esc((mode.icon?mode.icon+' ':'')+(mode.label||p.name))}<br>${esc(p.description||'')}</div>`;
+  el('pq').focus();
+}
+async function pluginAsk(){
+  if(!curPlugin) return;
+  const q=el('pq').value.trim(); if(!q) return;
+  el('pq').value=''; el('psendbtn').disabled=true;
+  const th=el('pthread'); if(th.querySelector('.empty')) th.innerHTML='';
+  addTurnTo(th,'me',esc(q));
+  const ai=addTurnTo(th,'ai','<span class="caret"></span>');
+  const body=ai.querySelector('.msg');
+  let full='';
+  try{
+    const res=await api('/plugins/'+encodeURIComponent(curPlugin)+'/query/stream',{method:'POST',body:JSON.stringify({question:q})});
+    const reader=res.body.getReader(); const dec=new TextDecoder(); let buf='';
+    while(true){
+      const {done,value}=await reader.read(); if(done) break;
+      buf+=dec.decode(value,{stream:true}); const parts=buf.split('\n\n'); buf=parts.pop();
+      for(const pr of parts){
+        if(!pr.startsWith('data: ')) continue; const ev=JSON.parse(pr.slice(6));
+        if(ev.type==='queued'){ body.innerHTML='<span class="txt" style="color:var(--text2)">대기 중… 다른 작업 완료 후 진행</span><span class="caret"></span>'; }
+        else if(ev.type==='meta'){ if(!ev.refused) body.innerHTML='<span class="txt"></span><span class="caret"></span>'; }
+        else if(ev.type==='token'){ full+=ev.text; renderStream(body,full); }
+        else if(ev.type==='done'){ finishAnswer(body,full,ev); }
+      }
+    }
+  }catch(e){ body.innerHTML='<span class="refused">오류: '+esc(e.message)+'</span>'; }
+  el('psendbtn').disabled=false; th.scrollTop=th.scrollHeight;
+}
+function renderPluginSettings(){
+  const box=el('pluginList'); if(!box) return;
+  if(!PLUGINS.length){ box.innerHTML='<div class="shint">설치된 플러그인이 없습니다.</div>'; return; }
+  box.innerHTML=PLUGINS.map(p=>{
+    const net=p.permissions&&p.permissions.network;
+    const folders=((p.permissions&&p.permissions.folders)||['*']).join(', ');
+    return `<div class="mrow"><div class="mrow-l" style="flex-direction:column;align-items:flex-start;gap:3px;min-width:0;">
+      <span class="mnm">${esc(p.name)} <span class="mdt">v${esc(p.version)}${p.builtin?' · 기본':''}</span></span>
+      <span class="mdt" style="white-space:normal;">${esc(p.description||'')}</span>
+      <span class="mdt" style="white-space:normal;">권한 · 폴더 ${esc(folders)} · 네트워크 <b style="color:${net?'#dc2626':'var(--ok)'}">${net?'허용':'차단'}</b>${p.error?(' · ⚠ '+esc(p.error)):''}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;flex-shrink:0;">
+        <button class="tinybtn tgl ${p.enabled?'on':''}" ${p.error?'disabled':''} onclick="togglePlugin('${esc(p.id)}',${!p.enabled})">${p.enabled?'켜짐':'꺼짐'}</button>
+        ${p.builtin?'':`<button class="tinybtn" style="color:#dc2626;border-color:#dc2626;" onclick="uninstallPlugin('${esc(p.id)}')">삭제</button>`}
+      </div>
+      </div>`;
+  }).join('');
+}
+async function togglePlugin(id,enable){
+  try{ await api('/plugins/'+encodeURIComponent(id)+'/enable',{method:'POST',body:JSON.stringify({enabled:enable})});
+    await loadPlugins();
+  }catch(e){}
+}
+async function openPluginsFolder(){ try{ await api('/plugins/open-folder',{method:'POST'}); }catch(e){} }
+async function uninstallPlugin(id){
+  const p=(PLUGINS||[]).find(x=>x.id===id); const name=p?p.name:id;
+  if(!confirm(`플러그인 "${name}"을(를) 삭제할까요?\n(플러그인 폴더가 제거됩니다)`)) return;
+  try{ await api('/plugins/'+encodeURIComponent(id)+'/uninstall',{method:'POST'});
+    if(curPlugin===id) switchView('home');
+    await loadPlugins();
+  }catch(e){}
+}
+
 // ===== Alt+Space quick-ask window =====
 function hideQuick(){ try{ if(window.__TAURI__) window.__TAURI__.core.invoke('hide_quick'); }catch(e){} }
 function initQuick(){
@@ -1582,6 +1779,7 @@ if(QUICK){
   initWatchSection();
   loadKB();
   loadSessions();
+  loadPlugins();
   checkOnboarding();
 }
 </script>

@@ -143,14 +143,16 @@ class LlamaCppProvider:
                 raise
 
     def generate_stream(self, prompt: str, system: str = "",
-                        model: Optional[str] = None) -> Iterator[str]:
+                        model: Optional[str] = None,
+                        temperature: Optional[float] = None) -> Iterator[str]:
         lrepo, lfile = self.settings.llm_gguf()
         path = self._resolve(lrepo, lfile)
+        temp = self.settings.temperature if temperature is None else temperature
         with self._gen_lock:                 # serialize native model access
             llm = self._get_llm(lfile, path)
             for chunk in llm.create_chat_completion(
                     messages=self._messages(prompt, system),
-                    temperature=self.settings.temperature, stream=True):
+                    temperature=temp, stream=True):
                 delta = chunk["choices"][0].get("delta", {}).get("content")
                 if delta:
                     yield delta

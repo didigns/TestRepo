@@ -506,6 +506,87 @@ def bots_restart(_=Depends(auth)):
     return {"ok": True, **MANAGER.status()}
 
 
+# ---- plugins (declarative, local, offline) ---------------------------
+class PluginEnableReq(BaseModel):
+    enabled: bool
+
+
+@app.get("/plugins/list")
+def plugins_list(_=Depends(auth)):
+    from .plugins import loader
+    return {"plugins": loader.list_plugins()}
+
+
+@app.post("/plugins/{pid}/enable")
+def plugins_enable(pid: str, req: PluginEnableReq, _=Depends(auth)):
+    from .plugins import loader
+    if not loader.set_enabled(pid, req.enabled):
+        raise HTTPException(400, "plugin not found or invalid")
+    return {"ok": True}
+
+
+@app.post("/plugins/{pid}/query/stream")
+def plugin_query_stream(pid: str, req: QueryReq, _=Depends(auth)):
+    """Run a plugin's mode: the plugin's persona steers generation while the
+    engine's grounding + citation rules stay in force. Passes through the same
+    inference queue as chat (serial on low-end hardware)."""
+    import json as _json
+    from .plugins import loader
+    persona = loader.persona_of(pid)
+    if persona is None:
+        raise HTTPException(400, "plugin not found or not enabled")
+    folders = loader.folders_of(pid)   # enforce the plugin's granted folder scope
+
+    def sse(ev):
+        return f"data: {_json.dumps(ev, ensure_ascii=False)}\n\n"
+
+    def gen():
+        if not _QGATE.acquire(blocking=False):
+            with _QWLOCK:
+                _QWAIT["n"] += 1
+            try:
+                yield sse({"type": "queued", "waiting": _queue_waiting()})
+                _QGATE.acquire()
+            finally:
+                with _QWLOCK:
+                    _QWAIT["n"] -= 1
+        try:
+            for ev in _state["engine"].query_stream(
+                    req.question, persona=persona, folders=folders):
+                yield sse(ev)
+        finally:
+            _QGATE.release()
+    return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+@app.post("/plugins/{pid}/uninstall")
+def plugins_uninstall(pid: str, _=Depends(auth)):
+    from .plugins import loader
+    if not loader.uninstall(pid):
+        raise HTTPException(400, "기본 플러그인은 삭제할 수 없거나 플러그인을 찾을 수 없습니다")
+    return {"ok": True}
+
+
+@app.post("/plugins/open-folder")
+def plugins_open_folder(_=Depends(auth)):
+    """Reveal the user plugins folder so a user can drop a plugin in."""
+    import os
+    import subprocess
+    import sys
+    from .plugins import loader
+    path = loader.plugins_dir()
+    try:
+        if sys.platform.startswith("win"):
+            os.startfile(path)                      # noqa: type-ignore (win only)
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", path])
+        else:
+            subprocess.Popen(["xdg-open", path])
+        return {"ok": True, "path": path}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
 @app.post("/quick-ask")
 def quick_ask(req: QueryReq, _=Depends(auth)):
     """Answer a question fired from the Alt+Space quick box, then pop a native

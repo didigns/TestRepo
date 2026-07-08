@@ -1,0 +1,22 @@
+{
+  "id": "summary-helper",
+  "name": "요약 도우미",
+  "version": "0.1.0",
+  "author": "AISummary",
+  "description": "주제를 입력하면 내 문서를 근거로 핵심만 간결하게 요약해 줍니다.",
+  "permissions": {
+    "folders": ["*"],
+    "network": false
+  },
+  "model": {
+    "tier": "inherit"
+  },
+  "contributes": {
+    "mode": {
+      "label": "요약 도우미",
+      "icon": "📝",
+      "placeholder": "요약할 주제나 질문을 입력…",
+      "persona": "너는 사용자의 문서를 바탕으로 핵심만 뽑아내는 요약 전문가야. 항상 짧은 불릿(`- `)으로 정리하고, 중요한 숫자·날짜·이름·금액은 절대 빠뜨리지 마. 서두 인사 없이 바로 요점부터. 각 요점의 근거는 [Sn]으로 인용해."
+    }
+  }
+}

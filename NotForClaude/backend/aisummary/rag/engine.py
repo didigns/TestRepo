@@ -36,8 +36,32 @@ SYSTEM = (
 
 REFUSAL = "제공된 문서에서 관련 내용을 찾을 수 없습니다."
 
+# Free / general mode: used when retrieval is weak (no confident document match).
+# Keeps the anti-hallucination guardrail for the user's *documents*, but lets the
+# assistant answer general / conversational / reasoning questions naturally
+# instead of refusing.
+GENERAL_SYSTEM = (
+    "당신은 AISummary의 친절하고 유능한 AI 비서입니다.\n"
+    "이 질문은 사용자의 로컬 문서에서 뚜렷한 근거를 찾지 못했습니다. "
+    "일반 지식과 상식으로 대화하듯 자연스럽고 도움이 되게 답하세요.\n"
+    "- 짧은 질문엔 짧게, 복잡하면 요점을 잡아 명확하게. 딱딱한 거부 문구는 쓰지 마세요.\n"
+    "- 추론과 일반 지식을 자유롭게 활용하되, 사용자의 특정 문서 내용을 아는 척 지어내지 마세요.\n"
+    "- 특정 파일·자료의 내용을 묻는데 근거가 없으면, 그 내용은 찾지 못했다고 솔직히 말한 뒤 "
+    "일반적인 관점에서 도와주세요.\n"
+    "- [S1] 같은 출처 인용 표기는 쓰지 마세요 (참조할 근거 문서가 없습니다)."
+)
+
 # Any citation marker a model might emit: [S1] · [1] · 【1】 · ①⑳ ❶❿ ➀➓ ⓪
 _CITE_ANY = re.compile(r"\[S?\d+\]|【\d+】|[①-⑳❶-❿➀-➓⓪]")
+
+
+def _with_persona(base: str, persona: Optional[str]) -> str:
+    """Append a plugin's persona/instructions AFTER the core rules, so the
+    grounding + citation guardrails always remain in force."""
+    persona = (persona or "").strip()
+    if not persona:
+        return base
+    return base + "\n\n[플러그인 역할·지침 — 위 규칙은 그대로 지키면서 아래 성격으로 답하세요]\n" + persona
 
 
 def _cited_numbers(raw: str) -> set:
@@ -126,12 +150,42 @@ class RagEngine:
         ranked = [by_id[i] for i in ranked_ids if i in by_id][:topk]
         return ranked, best
 
-    def query(self, question: str) -> Answer:
+    def _general_answer(self, question: str, best: float,
+                        persona: Optional[str] = None) -> Answer:
+        """Free-form answer when retrieval finds no confident document match.
+        No citations, no warnings, no refusal banner — just a natural reply."""
+        raw = self.provider.generate(
+            question, system=_with_persona(GENERAL_SYSTEM, persona),
+            temperature=getattr(self.settings, "general_temperature", 0.6))
+        return Answer(text=raw, citations=[], grounded=False,
+                      confidence=best, warnings=[], refused=False)
+
+    def _scope_hits(self, hits, folders):
+        """Restrict retrieved hits to files under the allowed folders. `None`
+        or `["*"]` means unrestricted. Used to enforce a plugin's granted
+        folder permissions — a plugin only ever sees what it's allowed to."""
+        if not folders or "*" in folders:
+            return hits
+        import os
+        allow = [os.path.normpath(f) for f in folders if f]
+        if not allow:
+            return hits
+
+        def ok(h):
+            sp = os.path.normpath(getattr(h, "source_path", "") or "")
+            return any(sp == a or sp.startswith(a + os.sep) for a in allow)
+        return [h for h in hits if ok(h)]
+
+    def query(self, question: str, persona: Optional[str] = None,
+              folders: Optional[list] = None) -> Answer:
         prof = self.settings.profile()
         hits, best = self._retrieve(question)
+        hits = self._scope_hits(hits, folders)
 
-        # ---- confidence gate ----
+        # ---- confidence gate: weak match -> general mode (or refuse) ----
         if not hits or best < self.settings.similarity_threshold:
+            if getattr(self.settings, "general_mode", True):
+                return self._general_answer(question, best, persona)
             return Answer(text=REFUSAL, grounded=True, confidence=best,
                           refused=True,
                           warnings=["검색 신뢰도가 임계값 미만 → 답변 거부"])
@@ -141,19 +195,41 @@ class RagEngine:
         prompt = (f"# 출처\n{context}\n\n"
                   f"# 질문\n{question}\n\n"
                   f"# 답변 (각 사실에 [Sn] 인용, 없으면 거부 문구)")
-        raw = self.provider.generate(prompt, system=SYSTEM,
+        raw = self.provider.generate(prompt, system=_with_persona(SYSTEM, persona),
                                      temperature=self.settings.temperature)
 
         return self._verify(raw, labeled, best)
 
-    def query_stream(self, question: str):
+    def query_stream(self, question: str, persona: Optional[str] = None,
+                     folders: Optional[list] = None):
         """Streaming variant. Yields dict events:
         {type:'meta', refused, confidence} → {type:'token', text} … →
         {type:'done', grounded, refused, citations, warnings}."""
         prof = self.settings.profile()
         hits, best = self._retrieve(question)
+        hits = self._scope_hits(hits, folders)
 
         if not hits or best < self.settings.similarity_threshold:
+            # Weak match -> general mode (natural free-form answer), unless the
+            # user disabled it, in which case keep the original hard refusal.
+            if getattr(self.settings, "general_mode", True):
+                gtemp = getattr(self.settings, "general_temperature", 0.6)
+                yield {"type": "meta", "refused": False, "confidence": round(best, 4)}
+                gsys = _with_persona(GENERAL_SYSTEM, persona)
+                buf = []
+                try:
+                    for tok in self.provider.generate_stream(
+                            question, system=gsys, temperature=gtemp):
+                        buf.append(tok)
+                        yield {"type": "token", "text": tok}
+                except Exception:  # provider without streaming -> one-shot
+                    raw = self.provider.generate(
+                        question, system=gsys, temperature=gtemp)
+                    yield {"type": "token", "text": raw}
+                yield {"type": "done", "grounded": False, "refused": False,
+                       "citations": [], "warnings": []}
+                return
+
             yield {"type": "meta", "refused": True, "confidence": round(best, 4)}
             yield {"type": "token", "text": REFUSAL}
             yield {"type": "done", "grounded": True, "refused": True,
@@ -165,13 +241,14 @@ class RagEngine:
                   f"# 답변 (각 사실에 [Sn] 인용, 없으면 거부 문구)")
         yield {"type": "meta", "refused": False, "confidence": round(best, 4)}
 
+        gsys = _with_persona(SYSTEM, persona)
         buf = []
         try:
-            for tok in self.provider.generate_stream(prompt, system=SYSTEM):
+            for tok in self.provider.generate_stream(prompt, system=gsys):
                 buf.append(tok)
                 yield {"type": "token", "text": tok}
         except Exception as e:  # provider without streaming → one-shot
-            raw = self.provider.generate(prompt, system=SYSTEM)
+            raw = self.provider.generate(prompt, system=gsys)
             buf = [raw]
             yield {"type": "token", "text": raw}
 

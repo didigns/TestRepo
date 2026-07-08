@@ -95,13 +95,15 @@ class OllamaProvider:
             raise
 
     def generate_stream(self, prompt: str, system: str = "",
-                        model: Optional[str] = None) -> Iterator[str]:
+                        model: Optional[str] = None,
+                        temperature: Optional[float] = None) -> Iterator[str]:
         import json
         model = model or self.settings.profile().llm_model
+        temp = self.settings.temperature if temperature is None else temperature
         with requests.post(
             f"{self.host}/api/generate",
             json={"model": model, "prompt": prompt, "system": system,
-                  "stream": True, "options": {"temperature": self.settings.temperature}},
+                  "stream": True, "options": {"temperature": temp}},
             stream=True, timeout=600,
         ) as r:
             _check(r, f"생성 스트림({model})")
