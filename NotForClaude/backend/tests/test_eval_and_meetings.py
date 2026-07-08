@@ -5,11 +5,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from ownyourpc.config import Settings
-from ownyourpc.rag.engine import RagEngine
-from ownyourpc.rag.evaluate import GoldenCase, evaluate
-from ownyourpc.meetings.transcribe import Transcript, Segment
-from ownyourpc.meetings.minutes import _extract_json, Minutes, render_pdf
+from aisummary.config import Settings
+from aisummary.rag.engine import RagEngine
+from aisummary.rag.evaluate import GoldenCase, evaluate
+from aisummary.meetings.transcribe import Transcript, Segment
+from aisummary.meetings.minutes import _extract_json, Minutes, render_pdf
 
 # reuse fake infra from test_core
 from test_core import _store_with, FakeProvider

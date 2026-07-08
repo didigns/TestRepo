@@ -1,11 +1,13 @@
 {
-  "name": "ownyourpc-desktop",
+  "name": "aisummary-desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "OwnYourPC Tauri desktop shell (loads the local FastAPI UI)",
+  "description": "AISummary Tauri desktop shell (loads the local FastAPI UI)",
   "scripts": {
     "tauri": "tauri",
-    "dev": "tauri dev",
+    "dev": "node dev.mjs",
+    "dev:app-only": "tauri dev",
+    "dev:backend": "python -m aisummary.api",
     "build": "tauri build"
   },
   "devDependencies": {

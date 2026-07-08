@@ -1,13 +1,13 @@
-﻿# OwnYourPC — custom Windows installer (payload script).
+﻿# AISummary — custom Windows installer (payload script).
 #
 # This runs *inside* the self-extracting setup.exe (built by
 # build-installer.ps1). At that point the extraction dir holds the app payload:
-#   OwnYourPC.exe          (Tauri shell)
+#   AISummary.exe          (Tauri shell)
 #   frontend\              (web UI)
 #   backend\               (Python FastAPI backend)
 #   icons\icon.ico
 #
-# It installs to %LOCALAPPDATA%\Programs\OwnYourPC, sets up a Python venv for
+# It installs to %LOCALAPPDATA%\Programs\AISummary, sets up a Python venv for
 # the backend, creates Start Menu + Desktop shortcuts, and registers an
 # uninstaller in Add/Remove Programs.
 #
@@ -20,14 +20,14 @@ param(
     # (true when embedded in the self-extractor).
     [string]$Payload = $PSScriptRoot,
     # Install target.
-    [string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'Programs\OwnYourPC'),
+    [string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'Programs\AISummary'),
     # Skip the Python venv/deps step (offline / already provisioned).
     [switch]$NoBackendSetup
 )
 
 $ErrorActionPreference = 'Stop'
-$AppName = 'OwnYourPC'
-$Publisher = 'OwnYourPC'
+$AppName = 'AISummary'
+$Publisher = 'AISummary'
 function Log($m) { Write-Host "[install] $m" }
 
 Log "설치 시작 → $InstallDir"
@@ -39,7 +39,7 @@ if (Test-Path $verFile) { $Version = (Get-Content $verFile -Raw).Trim() }
 Log "버전 $Version"
 
 # --- 2) Stop a running instance so files can be replaced ------------------
-Get-Process -Name 'OwnYourPC' -ErrorAction SilentlyContinue | ForEach-Object {
+Get-Process -Name 'AISummary' -ErrorAction SilentlyContinue | ForEach-Object {
     Log "실행 중인 앱 종료 (PID $($_.Id))"
     $_ | Stop-Process -Force -ErrorAction SilentlyContinue
 }
@@ -47,7 +47,7 @@ Start-Sleep -Milliseconds 500
 
 # --- 3) Copy payload ------------------------------------------------------
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-foreach ($item in 'OwnYourPC.exe','frontend','backend','icons') {
+foreach ($item in 'AISummary.exe','frontend','backend','icons') {
     $src = Join-Path $Payload $item
     if (Test-Path $src) {
         Log "복사: $item"
@@ -76,7 +76,7 @@ if (-not $NoBackendSetup) {
 }
 
 # --- 5) Shortcuts ---------------------------------------------------------
-$exe = Join-Path $InstallDir 'OwnYourPC.exe'
+$exe = Join-Path $InstallDir 'AISummary.exe'
 $ico = Join-Path $InstallDir 'icons\icon.ico'
 if (-not (Test-Path $ico)) { $ico = $exe }
 function New-Shortcut($lnkPath) {
@@ -85,7 +85,7 @@ function New-Shortcut($lnkPath) {
     $sc.TargetPath = $exe
     $sc.WorkingDirectory = $InstallDir
     $sc.IconLocation = $ico
-    $sc.Description = 'OwnYourPC — 로컬 문서 RAG + 회의록'
+    $sc.Description = 'AISummary — 로컬 문서 RAG + 회의록'
     $sc.Save()
 }
 $startMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\$AppName"
@@ -118,5 +118,5 @@ foreach ($k in $props.Keys) {
     New-ItemProperty -Path $regKey -Name $k -Value $props[$k] -PropertyType $type -Force | Out-Null
 }
 
-Log "설치 완료: OwnYourPC v$Version"
+Log "설치 완료: AISummary v$Version"
 Log "시작 메뉴 또는 바탕화면 바로가기로 실행하세요."

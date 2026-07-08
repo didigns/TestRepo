@@ -1,4 +1,4 @@
-"""OwnYourPC launcher.
+"""AISummary launcher.
 
 The app entry point (shortcuts point here, run via pythonw for no console).
 Sequence:
@@ -11,7 +11,7 @@ Sequence:
        backend down when the app closes.
 
 Requires PySide6 (bundled in the app's private runtime). Pure-stdlib update
-logic lives in oypc_update.py.
+logic lives in aisummary_update.py.
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ from PySide6.QtWidgets import (
     QGraphicsDropShadowEffect, QMessageBox,
 )
 
-import oypc_update as upd
+import aisummary_update as upd
 
 BACKEND_HOST = "127.0.0.1"
 BACKEND_PORT = 8756
@@ -55,14 +55,14 @@ def _first_existing(paths):
 
 
 def data_dir() -> Path:
-    d = Path(os.path.expanduser("~")) / ".ownyourpc"
+    d = Path(os.path.expanduser("~")) / ".aisummary"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
 def backend_dir():
     for cand in (INSTALL / "backend", INSTALL.parent / "backend"):
-        if (cand / "ownyourpc").is_dir():
+        if (cand / "aisummary").is_dir():
             return cand
     return None
 
@@ -87,10 +87,10 @@ def backend_python() -> str:
 
 def tauri_exe():
     return _first_existing([
-        INSTALL / "OwnYourPC.exe",
-        INSTALL / "app" / "OwnYourPC.exe",
-        INSTALL / "src-tauri" / "target" / "release" / "ownyourpc.exe",
-        INSTALL / "src-tauri" / "target" / "debug" / "ownyourpc.exe",
+        INSTALL / "AISummary.exe",
+        INSTALL / "app" / "AISummary.exe",
+        INSTALL / "src-tauri" / "target" / "release" / "aisummary.exe",
+        INSTALL / "src-tauri" / "target" / "debug" / "aisummary.exe",
     ])
 
 
@@ -144,8 +144,8 @@ class Worker(QObject):
     def _run(self):
         cur = current_version()
 
-        # 1) Update check (non-fatal; OYPC_NO_UPDATE=1 to skip)
-        skip_update = os.environ.get("OYPC_NO_UPDATE") == "1"
+        # 1) Update check (non-fatal; AISUMMARY_NO_UPDATE=1 to skip)
+        skip_update = os.environ.get("AISUMMARY_NO_UPDATE") == "1"
         self.status.emit("업데이트 확인 중…" if not skip_update else "시작 중…")
         try:
             if skip_update:
@@ -179,11 +179,11 @@ class Worker(QObject):
         # 4) Launch the app window
         exe = tauri_exe()
         if not exe:
-            raise RuntimeError("앱 실행 파일(OwnYourPC.exe)을 찾을 수 없습니다.")
+            raise RuntimeError("앱 실행 파일(AISummary.exe)을 찾을 수 없습니다.")
         self.status.emit("앱 여는 중…")
         env = dict(os.environ)
-        env["OYPC_NO_UPDATE"] = "1"   # launcher owns updates
-        env["OYPC_NO_BACKEND"] = "1"  # launcher owns the backend
+        env["AISUMMARY_NO_UPDATE"] = "1"   # launcher owns updates
+        env["AISUMMARY_NO_BACKEND"] = "1"  # launcher owns the backend
         app_proc = subprocess.Popen([str(exe)], env=env)
         self.done.emit()
 
@@ -214,14 +214,14 @@ class Worker(QObject):
     def _start_backend(self):
         bdir = backend_dir()
         if not bdir:
-            raise RuntimeError("backend 폴더(ownyourpc)를 찾을 수 없습니다.")
+            raise RuntimeError("backend 폴더(aisummary)를 찾을 수 없습니다.")
         log = open(data_dir() / "server.log", "a", encoding="utf-8", buffering=1)
         log.write(f"\n[launcher] start backend @ {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
         kwargs = {}
         if os.name == "nt":
             kwargs["creationflags"] = CREATE_NO_WINDOW
         self.backend_proc = subprocess.Popen(
-            [backend_python(), "-m", "ownyourpc.api"],
+            [backend_python(), "-m", "aisummary.api"],
             cwd=str(bdir), stdout=log, stderr=subprocess.STDOUT, **kwargs,
         )
 
@@ -298,7 +298,7 @@ class Splash(QWidget):
             logo.setPixmap(pix)
         lay.addWidget(logo)
 
-        title = QLabel("OwnYourPC")
+        title = QLabel("AISummary")
         title.setObjectName("title")
         title.setAlignment(Qt.AlignCenter)
         lay.addWidget(title)
@@ -380,7 +380,7 @@ class Controller(QObject):
 
     def on_failed(self, msg: str):
         self.splash.hide()
-        QMessageBox.critical(None, "OwnYourPC", f"시작 실패:\n{msg}")
+        QMessageBox.critical(None, "AISummary", f"시작 실패:\n{msg}")
         self.app.quit()
 
     def on_quit(self):

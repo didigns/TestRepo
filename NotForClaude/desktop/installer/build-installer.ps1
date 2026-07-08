@@ -1,4 +1,4 @@
-﻿# OwnYourPC — build a self-extracting setup.exe (custom installer).
+﻿# AISummary — build a self-extracting setup.exe (custom installer).
 #
 # Stages the app payload (Tauri exe + frontend + backend + icons + launcher +
 # private Python runtime + Python install scripts), zips it, and wraps it in a
@@ -13,13 +13,13 @@
 #   powershell -ExecutionPolicy Bypass -File installer\build-installer.ps1 `
 #       -Version 0.2.0
 #
-# Output: dist\OwnYourPC_<version>_x64-setup.exe
+# Output: dist\AISummary_<version>_x64-setup.exe
 
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [string]$Version,
     # Built Tauri executable. Default = Cargo release output.
-    [string]$AppExe   = (Join-Path $PSScriptRoot '..\src-tauri\target\release\ownyourpc.exe'),
+    [string]$AppExe   = (Join-Path $PSScriptRoot '..\src-tauri\target\release\aisummary.exe'),
     [string]$Frontend = (Join-Path $PSScriptRoot '..\..\frontend'),
     [string]$Backend  = (Join-Path $PSScriptRoot '..\..\backend'),
     [string]$Icons    = (Join-Path $PSScriptRoot '..\src-tauri\icons'),
@@ -30,7 +30,14 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-function Log($m) { Write-Host "[build] $m" -ForegroundColor Cyan }
+# Colored console output can throw IndexOutOfRangeException when the host has no
+# real console buffer (redirected output / some terminals). Write-Say degrades
+# gracefully to plain text instead of crashing the build.
+function Write-Say([string]$Message, [string]$Color = $null) {
+    try { if ($Color) { Write-Host $Message -ForegroundColor $Color } else { Write-Host $Message } }
+    catch { try { [Console]::WriteLine($Message) } catch {} }
+}
+function Log($m) { Write-Say "[build] $m" 'Cyan' }
 
 # Normalize OutDir to a clean absolute path (no '..').
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
@@ -47,7 +54,7 @@ try {
     # --- Stage payload ----------------------------------------------------
     if (-not (Test-Path $AppExe)) { throw "앱 실행 파일을 찾을 수 없음: $AppExe (먼저 tauri build를 실행하세요)" }
     Log "실행 파일: $AppExe"
-    Copy-Item $AppExe (Join-Path $stage 'OwnYourPC.exe') -Force
+    Copy-Item $AppExe (Join-Path $stage 'AISummary.exe') -Force
 
     Log "프론트엔드 복사"
     Copy-Item $Frontend (Join-Path $stage 'frontend') -Recurse -Force
@@ -84,9 +91,9 @@ try {
 
     # --- Self-extracting exe via .NET csc.exe -----------------------------
     # A tiny C# bootstrapper embeds app.zip as a resource; on run it extracts
-    # to %TEMP%\OwnYourPC_payload and launches install.ps1. Compiled with the
+    # to %TEMP%\AISummary_payload and launches install.ps1. Compiled with the
     # in-box .NET Framework csc.exe (present on all Windows) — no IExpress.
-    $target = Join-Path $OutDir "OwnYourPC_${Version}_x64-setup.exe"
+    $target = Join-Path $OutDir "AISummary_${Version}_x64-setup.exe"
     if (Test-Path $target) { Remove-Item $target -Force }
 
     $csSrc = Join-Path $pkgDir 'SelfExtract.cs'
@@ -108,7 +115,7 @@ static class SelfExtract {
         Application.EnableVisualStyles();
         ShowSplash();
         try {
-            string dest = Path.Combine(Path.GetTempPath(), "OwnYourPC_setup");
+            string dest = Path.Combine(Path.GetTempPath(), "AISummary_setup");
             if (Directory.Exists(dest)) { try { Directory.Delete(dest, true); } catch {} }
             Directory.CreateDirectory(dest);
 
@@ -137,7 +144,7 @@ static class SelfExtract {
             return p.ExitCode;
         } catch (Exception e) {
             CloseSplash();
-            MessageBox.Show(e.ToString(), "OwnYourPC 설치 오류",
+            MessageBox.Show(e.ToString(), "AISummary 설치 오류",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 1;
         }
@@ -153,7 +160,7 @@ static class SelfExtract {
                 TopMost = true, ShowInTaskbar = false
             };
             var title = new Label {
-                Text = "OwnYourPC", ForeColor = ColorTranslator.FromHtml("#e8ebf0"),
+                Text = "AISummary", ForeColor = ColorTranslator.FromHtml("#e8ebf0"),
                 Font = new Font("Segoe UI", 15, FontStyle.Bold),
                 TextAlign = ContentAlignment.MiddleCenter, Dock = DockStyle.Top, Height = 64
             };
@@ -220,6 +227,6 @@ finally {
     if ($script:success) {
         Remove-Item $buildRoot -Recurse -Force -ErrorAction SilentlyContinue
     } else {
-        Write-Host "[build] 빌드 산출물 보존: $buildRoot" -ForegroundColor DarkYellow
+        Write-Say "[build] 빌드 산출물 보존: $buildRoot" 'DarkYellow'
     }
 }

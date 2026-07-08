@@ -32,31 +32,74 @@ def is_indexed(path: str) -> bool:
     return path in _state()
 
 
+def _norm_state(state: dict) -> dict:
+    """State keyed by normalized path, for cross-referencing disk files."""
+    return {os.path.normpath(k): v for k, v in state.items()}
+
+
+def _disk_files(folder: str) -> List[Path]:
+    """All indexable files physically present under a folder (recursive).
+
+    This lets the folder view show files *before* indexing finishes — the
+    listing is sourced from disk, and index status is looked up separately.
+    """
+    from ..ingest import parsers
+    root = Path(folder)
+    if not root.exists():
+        return []
+    out: List[Path] = []
+    try:
+        for p in root.rglob("*"):
+            try:
+                if p.is_file() and parsers.is_supported(p):
+                    out.append(p)
+            except OSError:
+                continue
+    except Exception:
+        pass
+    return out
+
+
 def kb_summary(settings: Settings) -> dict:
-    state = _state()
+    """Per-folder rollup. `files` = total indexable files on disk,
+    `indexed` = how many are already in the index (green dots)."""
+    ns = _norm_state(_state())
     folders = []
     for folder in settings.watch_folders:
         f = os.path.normpath(folder)
-        files = [p for p in state if os.path.normpath(p).startswith(f)]
-        chunks = sum(int(state[p].get("chunks", 0)) for p in files)
-        folders.append({"path": folder, "name": os.path.basename(f.rstrip("/\\")) or folder,
-                        "files": len(files), "chunks": chunks})
+        disk = _disk_files(folder)
+        indexed = chunks = 0
+        for p in disk:
+            meta = ns.get(os.path.normpath(str(p)))
+            if meta:
+                indexed += 1
+                chunks += int(meta.get("chunks", 0))
+        folders.append({
+            "path": folder,
+            "name": os.path.basename(f.rstrip("/\\")) or folder,
+            "files": len(disk), "indexed": indexed, "chunks": chunks,
+        })
     return {
         "folders": folders,
-        "total_files": len(state),
-        "total_chunks": sum(int(v.get("chunks", 0)) for v in state.values()),
+        "total_files": sum(fo["files"] for fo in folders),
+        "total_indexed": sum(fo["indexed"] for fo in folders),
+        "total_chunks": sum(int(v.get("chunks", 0)) for v in _state().values()),
     }
 
 
 def list_files(settings: Settings, folder: str) -> List[dict]:
-    """Indexed files under a watched folder (name, path, chunk count)."""
-    state = _state()
-    f = os.path.normpath(folder)
+    """All indexable files under a folder (on disk), each flagged with its
+    index status. Unindexed files appear immediately with a gray dot; once
+    indexed they carry chunk counts and turn green in the UI."""
+    ns = _norm_state(_state())
     out = []
-    for p, meta in state.items():
-        if os.path.normpath(p).startswith(f):
-            out.append({"name": os.path.basename(p), "path": p,
-                        "chunks": int(meta.get("chunks", 0))})
+    for p in _disk_files(folder):
+        meta = ns.get(os.path.normpath(str(p)))
+        out.append({
+            "name": p.name, "path": str(p),
+            "indexed": bool(meta),
+            "chunks": int(meta.get("chunks", 0)) if meta else 0,
+        })
     out.sort(key=lambda x: x["name"].lower())
     return out
 

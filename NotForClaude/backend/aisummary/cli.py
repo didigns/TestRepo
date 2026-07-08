@@ -1,13 +1,13 @@
-"""OwnYourPC command-line interface.
+"""AISummary command-line interface.
 
 Runnable on the user's machine (where the local model backend lives):
 
-    python -m ownyourpc.cli doctor                 # check backend + models
-    python -m ownyourpc.cli pull                    # pull required models
-    python -m ownyourpc.cli ingest  <folder>        # vectorize a folder
-    python -m ownyourpc.cli ask     "질문..."        # grounded RAG answer
-    python -m ownyourpc.cli eval    [golden.json]   # real quality score
-    python -m ownyourpc.cli meeting <transcript.json>   # summary + PDF
+    python -m aisummary.cli doctor                 # check backend + models
+    python -m aisummary.cli pull                    # pull required models
+    python -m aisummary.cli ingest  <folder>        # vectorize a folder
+    python -m aisummary.cli ask     "질문..."        # grounded RAG answer
+    python -m aisummary.cli eval    [golden.json]   # real quality score
+    python -m aisummary.cli meeting <transcript.json>   # summary + PDF
 
 Everything runs locally against 127.0.0.1.
 """
@@ -71,8 +71,8 @@ def cmd_doctor(args):
         print(f"  OK {s.profile().llm_model}: {out[:40]!r}")
     except OllamaError as e:
         print(f"  FAIL {e}")
-        print("  -> 모델이 없으면 'python -m ownyourpc.cli pull' 로 GGUF 다운로드")
-    print("\n결과:", "준비 완료" if ok else "-> 'python -m ownyourpc.cli pull' 실행 필요")
+        print("  -> 모델이 없으면 'python -m aisummary.cli pull' 로 GGUF 다운로드")
+    print("\n결과:", "준비 완료" if ok else "-> 'python -m aisummary.cli pull' 실행 필요")
     return 0
 
 
@@ -190,7 +190,7 @@ def cmd_meeting_live(args):
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(prog="ownyourpc")
+    p = argparse.ArgumentParser(prog="aisummary")
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("doctor").set_defaults(func=cmd_doctor)
     sub.add_parser("pull").set_defaults(func=cmd_pull)

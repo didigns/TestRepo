@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>OwnYourPC</title>
+<title>AISummary</title>
 <style>
   :root{
     --bg:#f4f6f9; --panel:#ffffff; --panel2:#f8fafc; --border:#e9edf2;
@@ -68,8 +68,42 @@
   .subfiles{margin:1px 0 6px 8px;padding-left:6px;border-left:.5px solid var(--border);}
   .filerow2{cursor:pointer;} .filerow2:hover{background:var(--border);}
   .filerow2 .nm{color:var(--text2);}
+  .filerow2.unindexed .nm{color:var(--muted);}
+  /* per-file index status dot: gray = not indexed yet, green = indexed */
+  .idot{width:8px;height:8px;border-radius:50%;background:var(--muted);opacity:.5;flex-shrink:0;}
+  .idot.on{background:#16a34a;opacity:1;}
   .kb-foot{margin-top:auto;border-top:.5px solid var(--border);padding-top:9px;font-size:9px;color:var(--muted);display:flex;flex-direction:column;gap:5px;}
   .kb-foot .line{display:flex;align-items:center;gap:5px;}
+  /* kb-docs as a flex column: chat sessions on top (scroll), watch folder pinned bottom */
+  #kb-docs{display:flex;flex-direction:column;flex:1;min-height:0;}
+  #kb-docs.hidden{display:none !important;}
+  #kb-top{flex:1 1 auto;min-height:0;overflow-y:auto;}
+  #kb-top.rootdrop{outline:1.5px dashed var(--accent);outline-offset:-3px;border-radius:8px;}
+  /* watch-folder section: pinned to the bottom, collapsible, bounded height */
+  #watch-section{flex:0 0 auto;max-height:45%;display:flex;flex-direction:column;min-height:0;border-top:.5px solid var(--border);padding-top:4px;}
+  #watch-section.collapsed{max-height:none;}
+  .watch-h{cursor:pointer;user-select:none;}
+  .watch-h:hover{color:var(--text);}
+  .watch-chev{display:inline-block;width:10px;color:var(--muted);font-size:9px;transition:transform .15s;}
+  #watch-body{overflow-y:auto;min-height:0;}
+  #watch-section.collapsed #watch-body{display:none;}
+  /* chat sessions + user folders (drag-drop) */
+  .srow{display:flex;align-items:center;gap:7px;padding:6px 7px;border-radius:7px;font-size:11px;color:var(--text2);cursor:pointer;}
+  .srow:hover{background:var(--border);}
+  .srow.active{background:var(--accent-bg);color:var(--accent);}
+  .srow.active .nm{color:var(--accent);}
+  .srow .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);}
+  .srow.dragging{opacity:.4;}
+  .frow{display:flex;align-items:center;gap:7px;padding:6px 7px;border-radius:7px;font-size:11px;color:var(--text);cursor:pointer;}
+  .frow:hover{background:var(--border);}
+  .frow.drop{background:var(--accent-bg);outline:1px dashed var(--accent);}
+  .frow .chev{width:9px;color:var(--muted);font-size:9px;flex-shrink:0;}
+  .frow .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;}
+  /* nested sessions: indent clearly past the folder row + a tree guide line
+     so folder-vs-contents alignment isn't ambiguous */
+  .subsess{margin:2px 0 7px 23px;padding-left:9px;border-left:1px solid var(--border);}
+  .subsess .srow{font-size:11px;}
+  .sess-empty{color:var(--muted);font-size:10px;padding:4px 7px;}
   .thread{flex:1;overflow-y:auto;padding:18px 22px;}
   .turn{display:flex;gap:10px;margin:0 auto 18px;max-width:760px;}
   .av{width:24px;height:24px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:9px;}
@@ -256,6 +290,15 @@
   @keyframes obpulse{0%,100%{opacity:.22}50%{opacity:.7}}
   .ob-pct{font-size:11px;color:var(--text2);min-width:44px;text-align:right;}
   .ob-pct.ob-ok{color:var(--ok);}
+  /* Alt+Space quick-ask window (frameless, transparent Tauri window) */
+  body.quickmode{background:transparent;overflow:hidden;}
+  .qbar{position:fixed;inset:0;margin:8px;display:flex;align-items:center;gap:12px;
+    padding:0 18px;border-radius:16px;background:var(--panel);border:1px solid var(--border);
+    box-shadow:0 14px 44px rgba(0,0,0,.4);}
+  .qbar .qlogo{width:26px;height:26px;border-radius:8px;background:var(--coral);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;flex-shrink:0;}
+  .qbar input{flex:1;border:0;outline:0;background:transparent;color:var(--text);font-size:18px;padding:16px 0;}
+  .qbar .qstat{font-size:12px;color:var(--muted);white-space:nowrap;flex-shrink:0;}
 </style>
 </head>
 <body>
@@ -266,7 +309,7 @@
   <div class="col kb">
     <div class="brand">
       <span class="logo">O</span>
-      <div style="line-height:1.1;"><div style="font-size:13px;font-weight:600;">OwnYourPC</div><div class="tag">로컬 파일 RAG</div></div>
+      <div style="line-height:1.1;"><div style="font-size:13px;font-weight:600;">AISummary</div><div class="tag">로컬 파일 RAG</div></div>
       <span style="margin-left:auto;cursor:pointer;color:var(--muted);" onclick="openSettings()" title="설정">⚙</span>
     </div>
     <span class="badge">🔒 100% 로컬 · 오프라인</span>
@@ -275,14 +318,32 @@
       <button class="navbtn" data-view="meeting" onclick="switchView('meeting')">회의</button>
     </div>
     <div id="kb-docs">
-    <div class="srch">
-      <svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
-      <input id="filter" placeholder="파일 검색…" oninput="renderKB()" />
+    <div id="kb-top" ondragover="rootDragOver(event)" ondragleave="rootDragLeave(event)" ondrop="rootDrop(event)">
+      <!-- Chatting Session별 폴더 -->
+      <div class="sec"><span>대화</span>
+        <span style="display:flex;align-items:center;gap:9px;">
+          <span class="add" onclick="newFolder()" title="새 폴더">🗀</span>
+          <span class="add" onclick="newSession()" title="새 대화">＋</span>
+        </span>
+      </div>
+      <div id="sessions"></div>
+      <div class="sec" id="refsec" style="display:none;margin-top:12px;"><span>이 대화에서 참조</span></div>
+      <div id="refs"></div>
     </div>
-    <div class="sec"><span>감시 폴더</span><span class="add" onclick="addFolder()" title="폴더 추가">＋</span></div>
-    <div id="folders"></div>
-    <div class="sec" id="refsec" style="display:none;"><span>이 대화에서 참조</span></div>
-    <div id="refs"></div>
+    <!-- 감시 폴더: 하단으로 이동 · 헤더 클릭으로 접기/펼치기 -->
+    <div id="watch-section">
+      <div class="sec watch-h" onclick="toggleWatch()">
+        <span><span class="watch-chev" id="watchChev">▾</span> 감시 폴더</span>
+        <span class="add" onclick="event.stopPropagation();addFolder()" title="폴더 추가">＋</span>
+      </div>
+      <div id="watch-body">
+        <div class="srch">
+          <svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+          <input id="filter" placeholder="파일 검색…" oninput="renderKB()" />
+        </div>
+        <div id="folders"></div>
+      </div>
+    </div>
     </div><!-- /kb-docs -->
     <div id="meeting-list" class="mlist hidden">
       <button class="newbtn" onclick="newMeeting()">＋ 새 회의</button>
@@ -364,6 +425,7 @@
       <button class="stab-btn" data-t="gen" onclick="sTab('gen')">생성</button>
       <button class="stab-btn" data-t="rag" onclick="sTab('rag')">검색</button>
       <button class="stab-btn" data-t="meet" onclick="sTab('meet')">회의</button>
+      <button class="stab-btn" data-t="bots" onclick="sTab('bots')">봇</button>
       <button class="stab-btn" data-t="general" onclick="sTab('general')">일반</button>
     </div>
     <div class="scard-b">
@@ -428,6 +490,39 @@
           토큰 불필요. 설치 안 되면 화자 없이 전사만 저장됩니다.</div>
       </div>
 
+      <div class="stab hidden" id="stab-bots">
+        <div class="shint">Discord·Slack 봇을 연결하면 그 앱에서 바로 Agent에게 질문할 수 있어요. 토큰을 저장하고 활성화하면 앱 시작 시 자동 실행됩니다.</div>
+        <div id="botNotice" style="display:none;font-size:11px;font-weight:600;color:#dc2626;background:var(--coral-bg);border-radius:8px;padding:8px 10px;margin:8px 0;"></div>
+        <div class="sglab">Discord</div>
+        <input id="setDiscordToken" type="password" placeholder="Discord Bot Token"
+          onchange="saveTokenField(this.value,'discord_bot_token','discordSaved')"
+          style="width:100%;border:.5px solid var(--border);border-radius:7px;padding:8px 10px;background:var(--panel2);color:var(--text);font-size:12px;">
+        <div id="discordSaved" class="shint" style="margin:3px 0 0;"></div>
+        <div class="field" style="margin-top:9px;"><span>자동 실행 (봇 활성화)</span>
+          <button class="tinybtn tgl" id="setDiscordEn" onclick="tgl('setDiscordEn')">꺼짐</button></div>
+        <div class="field"><span>상태</span><span id="discordStat" style="font-size:11px;color:var(--muted)">—</span></div>
+        <div class="shint">개발자 포털에서 봇 생성 → <b>MESSAGE CONTENT INTENT</b> 켜기 → 서버 초대.
+          채널에서 <b>@멘션</b>하거나 <b>DM</b>으로 질문하면 답합니다. <code>pip install discord.py</code> 필요.</div>
+
+        <div class="sglab" style="margin-top:16px;">Slack</div>
+        <input id="setSlackBot" type="password" placeholder="Bot Token (xoxb-…)"
+          onchange="saveTokenField(this.value,'slack_bot_token','slackSaved')"
+          style="width:100%;border:.5px solid var(--border);border-radius:7px;padding:8px 10px;background:var(--panel2);color:var(--text);font-size:12px;">
+        <input id="setSlackApp" type="password" placeholder="App Token (xapp-…)"
+          onchange="saveTokenField(this.value,'slack_app_token','slackSaved')"
+          style="width:100%;border:.5px solid var(--border);border-radius:7px;padding:8px 10px;background:var(--panel2);color:var(--text);font-size:12px;margin-top:6px;">
+        <div id="slackSaved" class="shint" style="margin:3px 0 0;"></div>
+        <div class="field" style="margin-top:9px;"><span>자동 실행 (봇 활성화)</span>
+          <button class="tinybtn tgl" id="setSlackEn" onclick="tgl('setSlackEn')">꺼짐</button></div>
+        <div class="field"><span>상태</span><span id="slackStat" style="font-size:11px;color:var(--muted)">—</span></div>
+        <div class="shint">Socket Mode 켜기 + <code>app_mention</code>·<code>message.im</code> 이벤트 구독.
+          <b>@멘션</b>이나 <b>DM</b>으로 질문. <code>pip install slack_bolt</code> 필요.</div>
+
+        <div class="field" style="margin-top:14px;"><span>답변에 출처 파일명 포함</span>
+          <button class="tinybtn tgl" id="setBotCite" onclick="tgl('setBotCite')">켜짐</button></div>
+        <div style="text-align:right;margin-top:8px;"><button class="tinybtn" onclick="restartBots()">봇 다시 시작</button></div>
+      </div>
+
       <div class="stab hidden" id="stab-general">
         <div class="sglab">테마</div>
         <div class="themes" id="themeGrid"></div>
@@ -439,11 +534,26 @@
   </div>
 </div>
 
+<!-- reusable input modal (folder name, rename, …) -->
+<div class="modal" id="inputModal" onclick="if(event.target===this)imCancel()">
+  <div class="card">
+    <h3 id="imTitle">새 폴더</h3>
+    <div id="imLabel" style="font-size:11px;color:var(--text2);margin:-4px 0 7px;">폴더 이름</div>
+    <input id="imInput" placeholder=""
+      style="width:100%;border:.5px solid var(--border);border-radius:8px;padding:9px 11px;background:var(--panel2);color:var(--text);font-size:13px;outline:none;"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();imOk();}else if(event.key==='Escape'){event.preventDefault();imCancel();}" />
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+      <button class="tinybtn" onclick="imCancel()">취소</button>
+      <button class="tinybtn tgl on" onclick="imOk()">확인</button>
+    </div>
+  </div>
+</div>
+
 <!-- first-run onboarding wizard -->
 <div class="ob-mask" id="ob">
   <div class="ob">
     <div class="ob-head">
-      <div class="brand" style="margin:0;"><div class="logo">O</div><b>OwnYourPC 시작하기</b></div>
+      <div class="brand" style="margin:0;"><div class="logo">O</div><b>AISummary 시작하기</b></div>
       <div class="ob-steps" id="obSteps"></div>
     </div>
     <div class="ob-body" id="obBody"></div>
@@ -458,10 +568,11 @@
 <div id="ctxmenu" class="ctx"></div>
 <script src="/vendor/marked.min.js"></script>
 <script>
-const TOKEN="__OWNYOURPC_TOKEN__";
+const TOKEN="__AISUMMARY_TOKEN__";
 const H={"Content-Type":"application/json","X-Token":TOKEN};
 const api=(p,o={})=>fetch(p,{headers:H,...o});
 const el=id=>document.getElementById(id);
+const QUICK=new URLSearchParams(location.search).has('quick');   // Alt+Space quick-ask window
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 let KB={folders:[],total_files:0,total_chunks:0};
 let refFiles={};      // filename -> {path,page,snippet}
@@ -491,9 +602,14 @@ function fileIcon(name){
 async function loadKB(){
   try{
     const r=await api('/kb'); KB=await r.json();
-    el('kbstat').innerHTML=`🗄 ${KB.total_files}파일 · ${KB.total_chunks.toLocaleString()}청크`;
-    el('kbstatus').innerHTML=`<span style="color:var(--ok)">●</span> 최신 상태`;
+    const ti=(KB.total_indexed!=null)?KB.total_indexed:KB.total_files;
+    el('kbstat').innerHTML=`🗄 ${ti}/${KB.total_files}파일 · ${(KB.total_chunks||0).toLocaleString()}청크`;
+    const pending=(KB.folders||[]).some(fo=>(fo.indexed||0)<(fo.files||0));
+    el('kbstatus').innerHTML=pending
+      ? `<span style="color:var(--coral)">●</span> 인덱싱 중…`
+      : `<span style="color:var(--ok)">●</span> 최신 상태`;
     renderKB();
+    scheduleKbPoll();
   }catch(e){ el('kbstat').textContent='백엔드 연결 안 됨'; }
 }
 function renderKB(){
@@ -511,15 +627,211 @@ function renderKB(){
     if(open){
       const list=files.filter(x=>!f || x.name.toLowerCase().includes(f));
       sub='<div class="subfiles">'+(list.length?list.map(x=>
-        `<div class="row filerow2" title="${esc(x.path)}" onclick='openFile(${JSON.stringify(x.path)},${JSON.stringify(x.name)})' oncontextmenu='fileCtx(event,${JSON.stringify(x.path)},${JSON.stringify(x.name)})'>
-          ${fileIcon(x.name)}<span class="nm">${esc(x.name)}</span><span class="ct">${x.chunks}</span></div>`).join('')
+        `<div class="row filerow2 ${x.indexed?'':'unindexed'}" title="${esc(x.path)}" onclick='openFile(${JSON.stringify(x.path)},${JSON.stringify(x.name)},${x.indexed?1:0})' oncontextmenu='fileCtx(event,${JSON.stringify(x.path)},${JSON.stringify(x.name)})'>
+          ${fileIcon(x.name)}<span class="nm">${esc(x.name)}</span>${x.indexed?`<span class="ct">${x.chunks}</span>`:''}<span class="idot ${x.indexed?'on':''}" title="${x.indexed?'인덱싱 완료':'인덱싱 전'}"></span></div>`).join('')
         : '<div class="row" style="color:var(--muted);font-size:10px">파일 없음</div>')+'</div>';
     }
+    const fc=(fo.indexed!=null && fo.indexed<fo.files)?`${fo.indexed}/${fo.files}`:`${fo.files}`;
     return `<div class="row folder" onclick='toggleFolder(${JSON.stringify(fo.path)})'>
       <span style="width:9px;color:var(--muted);font-size:9px">${chev}</span>${folderSvg}
-      <span class="nm" style="color:var(--text)">${esc(fo.name)}</span><span class="ct">${fo.files}</span></div>${sub}`;
+      <span class="nm" style="color:var(--text)">${esc(fo.name)}</span><span class="ct">${fc}</span></div>${sub}`;
   }).join('') || `<div class="row" style="color:var(--muted)">일치하는 폴더 없음</div>`;
 }
+// collapse / expand the whole "감시 폴더" section (persisted)
+function toggleWatch(){
+  const sec=el('watch-section'); if(!sec) return;
+  const collapsed=sec.classList.toggle('collapsed');
+  const chev=el('watchChev'); if(chev) chev.textContent=collapsed?'▸':'▾';
+  try{ localStorage.setItem('oyp-watch-collapsed', collapsed?'1':'0'); }catch(e){}
+}
+function initWatchSection(){
+  const sec=el('watch-section'); if(!sec) return;
+  let collapsed=false;
+  try{ collapsed=localStorage.getItem('oyp-watch-collapsed')==='1'; }catch(e){}
+  sec.classList.toggle('collapsed',collapsed);
+  const chev=el('watchChev'); if(chev) chev.textContent=collapsed?'▸':'▾';
+}
+
+// ===== reusable in-app input modal (replaces window.prompt) =====
+let _imResolve=null;
+function promptModal(title,label,def){
+  el('imTitle').textContent=title||'';
+  el('imLabel').textContent=label||'';
+  el('imLabel').style.display=label?'block':'none';
+  const inp=el('imInput'); inp.value=def||'';
+  el('inputModal').classList.add('show');
+  setTimeout(()=>{ inp.focus(); inp.select(); },30);
+  return new Promise(res=>{ _imResolve=res; });
+}
+function imClose(v){
+  el('inputModal').classList.remove('show');
+  const r=_imResolve; _imResolve=null; if(r) r(v);
+}
+function imOk(){ imClose(el('imInput').value); }
+function imCancel(){ imClose(null); }
+
+// ===== chat sessions + user folders (drag-drop organization) =====
+let SESS={folders:[],sessions:[]};
+let curSession=null;      // active session id (null = unsaved new chat)
+let answeringSession=null;// session id whose answer is currently streaming
+let answerBody=null;      // live .msg node the stream renders into (re-attachable on nav)
+let answerText='';        // answer tokens accumulated so far
+let folderOpen={};        // folder_id -> expanded?
+let citeSets=[];          // per-saved-answer citation arrays (for reloaded convos)
+let _dragSid=null;
+
+async function loadSessions(){
+  try{ const r=await api('/sessions/list'); if(r.ok){ SESS=await r.json(); renderSessions(); } }
+  catch(e){}
+}
+function sessRowHtml(s){
+  const act=s.session_id===curSession?' active':'';
+  const bubble='<svg class="ico" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+  return `<div class="srow${act}" draggable="true"
+    ondragstart='sessDragStart(event,${JSON.stringify(s.session_id)})' ondragend="sessDragEnd(event)"
+    onclick='openSession(${JSON.stringify(s.session_id)})'
+    oncontextmenu='sessionCtx(event,${JSON.stringify(s.session_id)},${JSON.stringify(s.title)})'
+    title="${esc(s.preview||s.title)}">
+    ${bubble}<span class="nm">${esc(s.title)}</span></div>`;
+}
+function renderSessions(){
+  const inF={}; SESS.folders.forEach(f=>inF[f.folder_id]=[]);
+  const root=[];
+  SESS.sessions.forEach(s=>{ (s.folder_id&&inF[s.folder_id]?inF[s.folder_id]:root).push(s); });
+  const folderSvg='<svg class="ico" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+  const folders=SESS.folders.map(f=>{
+    const open=folderOpen[f.folder_id];
+    const kids=inF[f.folder_id]||[];
+    const chev=open?'▾':'▸';
+    const sub=open?`<div class="subsess">${kids.length?kids.map(sessRowHtml).join('')
+      :'<div class="sess-empty">비어 있음 · 여기로 드래그</div>'}</div>`:'';
+    return `<div class="frow"
+      ondragover="folderDragOver(event,this)" ondragleave="folderDragLeave(event,this)" ondrop='folderDrop(event,${JSON.stringify(f.folder_id)})'
+      onclick='toggleSessFolder(${JSON.stringify(f.folder_id)})'
+      oncontextmenu='folderCtx(event,${JSON.stringify(f.folder_id)},${JSON.stringify(f.name)})'>
+      <span class="chev">${chev}</span>${folderSvg}
+      <span class="nm">${esc(f.name)}</span><span class="ct">${kids.length}</span></div>${sub}`;
+  }).join('');
+  const rootHtml=root.map(sessRowHtml).join('');
+  const empty=(!SESS.folders.length&&!SESS.sessions.length)
+    ?'<div class="sess-empty">저장된 대화가 없습니다. ＋로 새 대화를 시작하세요.</div>':'';
+  el('sessions').innerHTML=folders+rootHtml+empty;
+}
+function toggleSessFolder(fid){ folderOpen[fid]=!folderOpen[fid]; renderSessions(); }
+
+// ---- drag & drop: move sessions into / out of folders ----
+function sessDragStart(e,sid){ _dragSid=sid; e.dataTransfer.effectAllowed='move';
+  try{ e.dataTransfer.setData('text/plain',sid); }catch(_){}
+  const t=e.currentTarget; if(t) setTimeout(()=>t.classList.add('dragging'),0); }
+function sessDragEnd(e){ _dragSid=null;
+  document.querySelectorAll('.srow.dragging').forEach(x=>x.classList.remove('dragging'));
+  document.querySelectorAll('.frow.drop').forEach(x=>x.classList.remove('drop'));
+  const kt=el('kb-top'); if(kt) kt.classList.remove('rootdrop'); }
+function folderDragOver(e,elm){ if(!_dragSid) return; e.preventDefault(); e.stopPropagation();
+  e.dataTransfer.dropEffect='move'; elm.classList.add('drop'); }
+function folderDragLeave(e,elm){ elm.classList.remove('drop'); }
+async function folderDrop(e,fid){ e.preventDefault(); e.stopPropagation();
+  document.querySelectorAll('.frow.drop').forEach(x=>x.classList.remove('drop'));
+  const sid=_dragSid||(e.dataTransfer&&e.dataTransfer.getData('text/plain')); if(!sid) return;
+  folderOpen[fid]=true; await moveSession(sid,fid); }
+function rootDragOver(e){ if(!_dragSid) return; e.preventDefault(); e.dataTransfer.dropEffect='move';
+  const kt=el('kb-top'); if(kt) kt.classList.add('rootdrop'); }
+function rootDragLeave(e){ if(e.target===e.currentTarget){ const kt=el('kb-top'); if(kt) kt.classList.remove('rootdrop'); } }
+async function rootDrop(e){ const kt=el('kb-top'); if(kt) kt.classList.remove('rootdrop');
+  const sid=_dragSid||(e.dataTransfer&&e.dataTransfer.getData('text/plain')); if(!sid) return;
+  e.preventDefault(); await moveSession(sid,null); }
+async function moveSession(sid,fid){
+  try{ await api('/sessions/'+encodeURIComponent(sid)+'/move',{method:'POST',body:JSON.stringify({folder_id:fid})});
+    await loadSessions(); }catch(e){} }
+
+// ---- session lifecycle ----
+function newSession(){
+  curSession=null; refFiles={}; citeStore=[]; closeSource();
+  el('thread').innerHTML='<div class="empty">내 문서에 대해 무엇이든 물어보세요.<br>답변은 항상 내 파일을 근거로 인용과 함께 제공됩니다.</div>';
+  renderRefs(); renderSessions();
+  const q=el('q'); if(q) q.focus();
+}
+async function newFolder(){
+  const name=await promptModal('새 폴더','폴더 이름','새 폴더'); if(name===null) return;
+  try{ const r=await api('/folders/create',{method:'POST',body:JSON.stringify({name:name||'새 폴더'})});
+    const f=await r.json(); if(f&&f.folder_id) folderOpen[f.folder_id]=true; await loadSessions(); }catch(e){} }
+async function openSession(sid){
+  try{ const r=await api('/sessions/'+encodeURIComponent(sid)); if(!r.ok) return;
+    const rec=await r.json(); curSession=sid; renderConversation(rec); renderSessions();
+    if(!el('view-chat')||el('view-chat').classList.contains('hidden')) switchView('chat');
+  }catch(e){} }
+function renderConversation(rec){
+  const thread=el('thread'); thread.innerHTML=''; refFiles={}; citeStore=[];
+  const msgs=rec.messages||[];
+  const answering=rec.session_id===answeringSession;   // an answer is streaming for this session
+  if(!msgs.length && !answering){ thread.innerHTML='<div class="empty">빈 대화입니다. 아래에 질문을 입력하세요.</div>';
+    renderRefs(); closeSource(); return; }
+  msgs.forEach(m=>{
+    if(m.role==='user'){ addTurn('me',esc(m.content)); }
+    else{
+      const setId=citeSets.push(m.citations||[])-1;
+      addTurn('ai',`<div class="ansmd">${renderAnswerSet(m.content||'',setId)}</div>`);
+      (m.citations||[]).forEach(c=>{ refFiles[c.filename]={path:c.source_path,page:c.page,snippet:c.snippet}; });
+    }
+  });
+  if(answering){
+    // re-attach the in-progress answer so streaming continues into this view,
+    // re-rendering everything received so far (not just a "generating" note)
+    const ai=addTurn('ai','<span class="caret"></span>');
+    answerBody=ai.querySelector('.msg');
+    if(answerText) renderStream(answerBody, answerText);
+  }
+  renderRefs();
+  thread.scrollTop=thread.scrollHeight;
+}
+// render a saved answer's markdown with citation chips bound to that answer's own citation set
+function chipFor(setId,n){
+  const set=citeSets[setId]||[]; const c=set[n-1];
+  if(!c) return `<span class="cite">${n}</span>`;
+  const nm=c.filename&&c.filename.length>24 ? c.filename.slice(0,22)+'…' : (c.filename||'');
+  return `<span class="cite" onclick="openSetSource(${setId},${n-1})" title="${esc(c.source_path||'')} · p.${c.page||1}">`
+    +`${fileIcon(c.filename||'')}<span class="cn">${esc(nm)}</span></span>`;
+}
+function openSetSource(setId,i){ const c=(citeSets[setId]||[])[i]; if(c) showSource(c); }
+function renderAnswerSet(text,setId){
+  text=normalizeCites(text);
+  const nums=[];
+  const pt=text.replace(/\[S(\d+)\]/g,(m,n)=>{nums.push(+n);return `%%C${nums.length-1}%%`;});
+  let html=(window.marked&&marked.parse)?marked.parse(pt):('<p>'+esc(pt).replace(/\n/g,'<br>')+'</p>');
+  return html.replace(/%%C(\d+)%%/g,(m,i)=>chipFor(setId,nums[+i]));
+}
+
+// ---- session / folder context menus ----
+function sessionCtx(e,sid,title){
+  const items=[
+    {label:'열기', fn:()=>openSession(sid)},
+    {label:'이름 변경', fn:()=>renameSession(sid,title)},
+    {sep:true},
+  ];
+  // move-to-folder options (reliable alternative to drag-and-drop)
+  const cur=(SESS.sessions.find(s=>s.session_id===sid)||{}).folder_id||null;
+  SESS.folders.forEach(f=>{ if(f.folder_id!==cur)
+    items.push({label:'📁 '+f.name+'(으)로 이동', fn:()=>moveSession(sid,f.folder_id)}); });
+  if(cur) items.push({label:'⤴ 루트로 이동', fn:()=>moveSession(sid,null)});
+  items.push({sep:true});
+  items.push({label:'삭제', danger:true, fn:()=>deleteSession(sid,title)});
+  showCtx(e,items);
+}
+function folderCtx(e,fid,name){
+  showCtx(e,[
+    {label:'이름 변경', fn:()=>renameFolder(fid,name)},
+    {label:'삭제 (대화는 루트로)', danger:true, fn:()=>deleteFolder(fid,name)},
+  ]);
+}
+async function renameSession(sid,title){ const nt=await promptModal('대화 이름 변경','대화 이름',title||'대화'); if(nt===null) return;
+  try{ await api('/sessions/'+encodeURIComponent(sid)+'/rename',{method:'POST',body:JSON.stringify({title:nt})}); loadSessions(); }catch(e){} }
+async function deleteSession(sid,title){ if(!confirm(`대화 "${title}"을(를) 삭제할까요?`)) return;
+  try{ await api('/sessions/'+encodeURIComponent(sid)+'/delete',{method:'POST'}); if(curSession===sid) newSession(); loadSessions(); }catch(e){} }
+async function renameFolder(fid,name){ const nt=await promptModal('폴더 이름 변경','폴더 이름',name||'폴더'); if(nt===null) return;
+  try{ await api('/folders/'+encodeURIComponent(fid)+'/rename',{method:'POST',body:JSON.stringify({name:nt})}); loadSessions(); }catch(e){} }
+async function deleteFolder(fid,name){ if(!confirm(`폴더 "${name}"을(를) 삭제할까요?\n안의 대화는 삭제되지 않고 루트로 이동합니다.`)) return;
+  try{ await api('/folders/'+encodeURIComponent(fid)+'/delete',{method:'POST'}); loadSessions(); }catch(e){} }
+
 async function toggleFolder(path){
   expanded[path]=!expanded[path];
   if(expanded[path] && !folderFiles[path]){
@@ -528,10 +840,18 @@ async function toggleFolder(path){
   }
   renderKB();
 }
-function openFile(path,name){
+function openFile(path,name,indexed){
+  el('srcpanel').classList.remove('hidden');
+  if(indexed===0){   // not indexed yet — no preview available, offer to index now
+    curSrc=null;
+    el('srcbody').innerHTML=`<div class="doc-meta">${fileIcon(name)}<span style="color:var(--text);font-weight:600">${esc(name)}</span></div>
+      <div class="empty">아직 인덱싱되지 않은 파일입니다.<br>인덱싱이 끝나면 미리보기와 인용을 볼 수 있어요.
+      <div style="margin-top:14px"><button class="mbtn start" style="font-size:11px;padding:6px 13px" onclick='reindexFile(${JSON.stringify(path)})'>지금 인덱싱</button></div></div>`;
+    return;
+  }
   const isPdf=(path||'').toLowerCase().endsWith('.pdf');
   curSrc={path,filename:name,page:1,citedPage:1,q:'',isPdf,pages:1};
-  el('srcpanel').classList.remove('hidden'); renderSource();
+  renderSource();
 }
 function renderRefs(){
   const keys=Object.keys(refFiles);
@@ -554,10 +874,15 @@ async function addFolder(){
     p=prompt('인덱싱할 폴더 경로를 입력하세요 (예: C:\\\\Users\\\\...\\\\문서)');
     if(!p) return;
   }
-  el('kbstat').textContent='인덱싱 중…';
-  try{ const r=await api('/ingest/scan',{method:'POST',body:JSON.stringify({folder:p})});
+  el('kbstat').textContent='폴더 읽는 중…';
+  try{ const r=await api('/ingest/scan-async',{method:'POST',body:JSON.stringify({folder:p})});
     const j=await r.json(); if(!r.ok) throw new Error(j.detail||'실패');
-    await loadKB();
+    await loadKB();                       // files show immediately (gray dots)
+    expanded[p]=true;                     // auto-open the new folder
+    try{ const fr=await api('/kb/files?folder='+encodeURIComponent(p));
+      folderFiles[p]=(await fr.json()).files||[]; }catch(_){}
+    renderKB();
+    scheduleKbPoll();                     // dots turn green as indexing proceeds
   }catch(e){ el('kbstat').textContent='오류: '+e.message; }
 }
 
@@ -604,8 +929,31 @@ async function ask(){
   if(el('thread').querySelector('.empty')) el('thread').innerHTML='';
   addTurn('me',esc(q));
   const ai=addTurn('ai','<span class="caret"></span>');
-  const body=ai.querySelector('.msg');
-  let full='';
+  answerBody=ai.querySelector('.msg'); answerText='';   // module-level so nav can re-attach
+  // ensure a saved session exists (title from the first question) and show it
+  // in the list IMMEDIATELY — before the answer streams — so switching tabs
+  // mid-answer doesn't hide the new session.
+  if(!curSession){
+    try{ const cr=await api('/sessions/create',{method:'POST',body:JSON.stringify({title:q.slice(0,40)})});
+      if(cr.ok){ const rec=await cr.json(); curSession=rec.session_id;
+        SESS.sessions.unshift({session_id:rec.session_id,title:rec.title||q.slice(0,40),
+          folder_id:null,updated_at:rec.updated_at||0,preview:q.slice(0,80),count:0});
+        renderSessions();
+      }
+    }catch(e){}
+  }
+  // Pin the session this answer belongs to. Navigating to another session
+  // mid-answer must NOT re-route where the messages get saved.
+  const askSession=curSession;
+  // Persist the question immediately so returning to this session while the
+  // answer is still streaming shows the conversation, not a blank screen.
+  if(askSession){
+    try{ await api('/sessions/'+encodeURIComponent(askSession)+'/append',
+      {method:'POST',body:JSON.stringify({role:'user',content:q})}); }catch(e){}
+    loadSessions();
+  }
+  answeringSession=askSession;
+  let doneEv=null, errored=false;
   try{
     const res=await api('/query/stream',{method:'POST',body:JSON.stringify({question:q})});
     const reader=res.body.getReader(); const dec=new TextDecoder(); let buf='';
@@ -616,13 +964,30 @@ async function ask(){
       for(const p of parts){
         if(!p.startsWith('data: ')) continue;
         const ev=JSON.parse(p.slice(6));
-        if(ev.type==='meta'){ if(!ev.refused) body.innerHTML='<span class="txt"></span><span class="caret"></span>'; }
-        else if(ev.type==='token'){ full+=ev.text; renderStream(body,full); }
-        else if(ev.type==='done'){ finishAnswer(body,full,ev); }
+        // render into the live node when it's on screen. `answerBody` is
+        // module-level: navigating back to this session re-points it at the
+        // freshly-rendered turn, so streaming resumes there seamlessly.
+        if(ev.type==='queued'){ if(answerBody && answerBody.isConnected) answerBody.innerHTML='<span class="txt" style="color:var(--text2)">대기 중… 다른 작업이 끝나면 시작합니다'+(ev.waiting>1?(' ('+ev.waiting+'개 대기)'):'')+'</span><span class="caret"></span>'; }
+        else if(ev.type==='meta'){ if(!ev.refused && answerBody && answerBody.isConnected) answerBody.innerHTML='<span class="txt"></span><span class="caret"></span>'; }
+        else if(ev.type==='token'){ answerText+=ev.text; if(answerBody && answerBody.isConnected) renderStream(answerBody,answerText); }
+        else if(ev.type==='done'){ doneEv=ev; if(answerBody && answerBody.isConnected) finishAnswer(answerBody,answerText,ev); }
       }
     }
-  }catch(e){ body.innerHTML='<span class="refused">오류: '+esc(e.message)+'</span>'; }
+  }catch(e){ errored=true; if(answerBody && answerBody.isConnected) answerBody.innerHTML='<span class="refused">오류: '+esc(e.message)+'</span>'; }
+  const full=answerText;
+  const shown=!!(answerBody && answerBody.isConnected);   // final answer already on screen?
+  answeringSession=null; answerBody=null; answerText='';
   el('sendbtn').disabled=false;
+  // persist the answer to the pinned session (serialized to avoid file races)
+  if(askSession){
+    try{ await api('/sessions/'+encodeURIComponent(askSession)+'/append',
+      {method:'POST',body:JSON.stringify({role:'assistant',
+        content:errored?'(오류로 응답 없음)':full,
+        citations:(doneEv&&doneEv.citations)||[]})}); }catch(e){}
+    loadSessions();
+    // viewing this session but the finished answer isn't on screen -> reload
+    if(curSession===askSession && !shown){ openSession(askSession); }
+  }
 }
 function renderStream(body,full){
   let t=body.querySelector('.txt');
@@ -750,8 +1115,52 @@ function renderThemes(){
 }
 async function saveSetting(body){ try{ await api('/settings',{method:'POST',body:JSON.stringify(body)}); }catch(e){} }
 function setToggle(id,on){ const b=el(id); b.dataset.on=on?'1':'0'; b.textContent=on?'켜짐':'꺼짐'; b.classList.toggle('on',!!on); }
+const TGL_MAP={setHyb:'hybrid_search',setCite:'require_citations',setDiar:'diarize_enabled',
+  setDiscordEn:'discord_enabled',setSlackEn:'slack_enabled',setBotCite:'bot_reply_citations'};
 function tgl(id){ const on=el(id).dataset.on!=='1'; setToggle(id,on);
-  saveSetting(id==='setHyb'?{hybrid_search:on}: id==='setCite'?{require_citations:on}: {diarize_enabled:on}); }
+  const body={}; body[TGL_MAP[id]||'diarize_enabled']=on; saveSetting(body);
+  if(id==='setDiscordEn'||id==='setSlackEn') setTimeout(refreshBots,1600); }
+// save a bot token and CONFIRM it round-trips — catches a stale backend that
+// silently drops the field (the usual cause of "토큰이 사라져요").
+async function saveTokenField(value, key, noteId){
+  const note=el(noteId);
+  if(note){ note.textContent='저장 중…'; note.style.color='var(--muted)'; }
+  try{
+    await api('/settings',{method:'POST',body:JSON.stringify({[key]:value})});
+    const sv=await (await api('/settings')).json();
+    const ok=(sv[key]||'')===(value||'');
+    if(note){ note.textContent= ok?'✓ 저장됨':'⚠ 저장 안 됨 — 백엔드(앱)를 재시작하세요';
+      note.style.color= ok?'var(--ok)':'#dc2626'; }
+    refreshBots();
+  }catch(e){ if(note){ note.textContent='⚠ 저장 실패'; note.style.color='#dc2626'; } }
+}
+async function refreshBots(){
+  const notice=el('botNotice');
+  try{
+    const r=await api('/bots/status');
+    if(r.status===404){ if(notice){ notice.style.display='block';
+      notice.textContent='⚠ 실행 중인 백엔드에 봇 기능이 없습니다. 봇을 쓰려면 앱(백엔드)을 재시작하세요.'; } return; }
+    if(!r.ok) return;
+    if(notice) notice.style.display='none';
+    const j=await r.json();
+    const fmt=(b)=>{ const M={connected:['●','var(--ok)'],starting:['◐','var(--coral)'],error:['●','#dc2626'],stopped:['○','var(--muted)']};
+      const [dot,col]=M[b.status]||['○','var(--muted)'];
+      const label={connected:'연결됨',starting:'연결 중…',error:'오류',stopped:'중지됨'}[b.status]||b.status;
+      return `<span style="color:${col}">${dot}</span> ${esc(label)}${b.detail?(' · '+esc(b.detail)):''}`; };
+    if(el('discordStat')) el('discordStat').innerHTML=fmt(j.discord||{status:'stopped'});
+    if(el('slackStat')) el('slackStat').innerHTML=fmt(j.slack||{status:'stopped'});
+  }catch(e){ if(notice){ notice.style.display='block'; notice.textContent='⚠ 백엔드에 연결할 수 없습니다.'; } }
+}
+async function restartBots(){ try{ await api('/bots/restart',{method:'POST'}); }catch(e){} setTimeout(refreshBots,1600); }
+// live-refresh bot status while the 봇 tab is open (starting -> 연결됨 updates itself)
+let _botPoll=null;
+function startBotPoll(){
+  if(_botPoll) return;
+  _botPoll=setInterval(()=>{
+    if(!el('settings').classList.contains('show')){ clearInterval(_botPoll); _botPoll=null; return; }
+    if(el('stab-bots') && !el('stab-bots').classList.contains('hidden')) refreshBots();
+  },3000);
+}
 async function loadSettings(){
   try{
     const [sv,hw]=await Promise.all([api('/settings').then(r=>r.json()), api('/hardware').then(r=>r.json())]);
@@ -766,6 +1175,12 @@ async function loadSettings(){
     el('setDev').value=sv.stt_device||'cpu';
     setToggle('setHyb', sv.hybrid_search); setToggle('setCite', sv.require_citations);
     setToggle('setDiar', sv.diarize_enabled); if(el('setHf')) el('setHf').value=sv.hf_token||'';
+    if(el('setDiscordToken')) el('setDiscordToken').value=sv.discord_bot_token||'';
+    if(el('setSlackBot')) el('setSlackBot').value=sv.slack_bot_token||'';
+    if(el('setSlackApp')) el('setSlackApp').value=sv.slack_app_token||'';
+    setToggle('setDiscordEn', sv.discord_enabled); setToggle('setSlackEn', sv.slack_enabled);
+    setToggle('setBotCite', sv.bot_reply_citations!==false);
+    refreshBots();
     el('modelchip').textContent=(sv.tier==='low'?'Gemma 4 E2B':'Gemma 4 E4B')+' · 로컬';
     loadModels(); renderThemes();
   }catch(e){ el('hwinfo').textContent='설정 불러오기 실패'; }
@@ -773,6 +1188,7 @@ async function loadSettings(){
 function sTab(t){
   document.querySelectorAll('.stab-btn').forEach(b=>b.classList.toggle('active',b.dataset.t===t));
   document.querySelectorAll('.stab').forEach(s=>s.classList.toggle('hidden', s.id!=='stab-'+t));
+  if(t==='bots'){ refreshBots(); startBotPoll(); }
 }
 async function loadModels(){
   try{ const r=await api('/models'); renderModels(await r.json()); }
@@ -968,7 +1384,32 @@ function meetingCtx(e,id,title){
   ]);
 }
 async function revealFile(path){ try{ await api('/reveal',{method:'POST',body:JSON.stringify({path})}); }catch(e){} }
-async function reindexFile(path){ try{ await api('/ingest/file',{method:'POST',body:JSON.stringify({path})}); loadKB(); }catch(e){} }
+async function reindexFile(path){ try{ await api('/ingest/file',{method:'POST',body:JSON.stringify({path})}); await refreshOpenFolders(); await loadKB(); }catch(e){} }
+// re-fetch file lists for every expanded folder so status dots stay current
+async function refreshOpenFolders(){
+  for(const k of Object.keys(expanded)){
+    if(expanded[k]){
+      try{ const r=await api('/kb/files?folder='+encodeURIComponent(k));
+        folderFiles[k]=(await r.json()).files||[]; }catch(e){}
+    }
+  }
+  renderKB();
+}
+// while any folder still has un-indexed files, poll so gray dots turn green
+let _kbPoll=null;
+function scheduleKbPoll(){
+  const pending=(KB.folders||[]).some(fo=>(fo.indexed||0)<(fo.files||0));
+  if(!pending){ if(_kbPoll){ clearInterval(_kbPoll); _kbPoll=null; } return; }
+  if(_kbPoll) return;
+  _kbPoll=setInterval(async()=>{
+    try{ const r=await api('/kb'); KB=await r.json();
+      el('kbstat').innerHTML=`🗄 ${KB.total_indexed}/${KB.total_files}파일 · ${(KB.total_chunks||0).toLocaleString()}청크`;
+      await refreshOpenFolders();
+    }catch(e){}
+    if(!(KB.folders||[]).some(fo=>(fo.indexed||0)<(fo.files||0))){ clearInterval(_kbPoll); _kbPoll=null;
+      el('kbstatus').innerHTML=`<span style="color:var(--ok)">●</span> 최신 상태`; }
+  },4000);
+}
 async function removeFile(path,name){
   if(!confirm(`"${name}"을(를) 인덱스에서 제거할까요?\n(원본 파일은 삭제되지 않습니다)`)) return;
   try{ await api('/ingest/remove',{method:'POST',body:JSON.stringify({path})});
@@ -1019,7 +1460,7 @@ function obRender(){
   el('obSkip').style.display=(s<5)?'inline-block':'none';
   const nx=el('obNext'); nx.disabled=false;
   const b=el('obBody');
-  if(s===0){ b.innerHTML=`<h2>OwnYourPC에 오신 걸 환영합니다</h2><div class="sub">100% 로컬로 문서 질의응답과 회의 전사·요약을 제공합니다. 클라우드 전송 없이 이 PC 안에서만 동작해요.<br><br>시작 전에 사양에 맞는 설정과 필요한 AI 모델을 준비하겠습니다.</div>`; nx.textContent='시작'; }
+  if(s===0){ b.innerHTML=`<h2>AISummary에 오신 걸 환영합니다</h2><div class="sub">100% 로컬로 문서 질의응답과 회의 전사·요약을 제공합니다. 클라우드 전송 없이 이 PC 안에서만 동작해요.<br><br>시작 전에 사양에 맞는 설정과 필요한 AI 모델을 준비하겠습니다.</div>`; nx.textContent='시작'; }
   else if(s===1){ b.innerHTML=obTierHtml(); nx.textContent='다음'; }
   else if(s===2){ b.innerHTML=obModelsHtml(); nx.textContent='다운로드 시작'; }
   else if(s===3){ b.innerHTML=obFolderHtml(); nx.textContent='다음'; }
@@ -1114,9 +1555,35 @@ async function healthLoop(){
     if(!_serverDown){ _serverDown=true; el('netbanner').classList.remove('hidden'); }
   }
 }
-setInterval(healthLoop, 4000);
-loadKB();
-checkOnboarding();
+// ===== Alt+Space quick-ask window =====
+function hideQuick(){ try{ if(window.__TAURI__) window.__TAURI__.core.invoke('hide_quick'); }catch(e){} }
+function initQuick(){
+  document.body.classList.add('quickmode');
+  document.body.innerHTML=`<div class="qbar">
+    <span class="qlogo">O</span>
+    <input id="qq" placeholder="무엇이든 물어보세요…  (Enter 질문 · Esc 닫기)" />
+    <span class="qstat" id="qstat"></span></div>`;
+  const inp=el('qq'); setTimeout(()=>inp.focus(),40);
+  inp.addEventListener('keydown', async (e)=>{
+    if(e.key==='Escape'){ e.preventDefault(); hideQuick(); return; }
+    if(e.key!=='Enter') return;
+    const q=inp.value.trim(); if(!q) return;
+    inp.disabled=true; el('qstat').textContent='생각 중…';
+    try{ await api('/quick-ask',{method:'POST',body:JSON.stringify({question:q})}); }catch(_){}
+    inp.value=''; inp.disabled=false; el('qstat').textContent='';
+    hideQuick();   // the answer arrives as a Windows alert
+  });
+}
+
+if(QUICK){
+  initQuick();
+}else{
+  setInterval(healthLoop, 4000);
+  initWatchSection();
+  loadKB();
+  loadSessions();
+  checkOnboarding();
+}
 </script>
 </body>
 </html>

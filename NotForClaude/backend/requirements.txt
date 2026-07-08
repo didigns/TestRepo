@@ -38,8 +38,13 @@ pip-audit>=2.7
 llama-cpp-python>=0.3      # in-process GGUF inference (no Ollama needed)
 huggingface_hub>=0.24      # downloads GGUF models
 
-# 기본 백엔드는 llama-cpp-python(인프로세스). 'python -m ownyourpc.cli pull'이
+# 기본 백엔드는 llama-cpp-python(인프로세스). 'python -m aisummary.cli pull'이
 # unsloth/gemma-4-E4B-it-GGUF + nomic-embed-text-v1.5-GGUF 를 자동 다운로드.
 #
 # (선택) Ollama 백엔드를 쓰려면 config.json에서 "backend": "ollama" 로 바꾸고:
 #   ollama pull gemma4:e4b && ollama pull nomic-embed-text
+
+# --- chat-app bots (optional; ask the Agent from Discord / Slack) ---
+discord.py>=2.3        # Discord bot (needs MESSAGE CONTENT INTENT)
+slack_bolt>=1.18       # Slack bot (Socket Mode: xoxb- + xapp- tokens)
+#   설정 > 봇 탭에서 토큰 입력 후 활성화하면 앱 시작 시 자동 실행됩니다.

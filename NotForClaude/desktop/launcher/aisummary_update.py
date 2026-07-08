@@ -1,4 +1,4 @@
-"""OwnYourPC update logic — shared by the launcher and installer.
+"""AISummary update logic — shared by the launcher and installer.
 
 Pure standard library (urllib, hashlib, json) so it runs on a minimal
 embedded Python with no third-party dependencies.
@@ -10,7 +10,7 @@ The app reads a small `.meta` JSON hosted on Google Drive:
       "notes": "...",
       "mandatory": false,
       "installer": {
-        "filename": "OwnYourPC-setup.exe",
+        "filename": "AISummary-setup.exe",
         "url": "https://drive.google.com/file/d/<ID>/view?...",
         "size": 3549696,
         "sha256": "<64 hex>"
@@ -30,7 +30,7 @@ from typing import Callable, Optional
 # Drive file id of the `.meta` document the app reads.
 DEFAULT_META_ID = "1hsD3y7bAJYCDdE1TR31gE6odYVWEy2T_"
 
-_UA = "OwnYourPC-Updater/1.0"
+_UA = "AISummary-Updater/1.0"
 
 
 def drive_download_url(file_id: str) -> str:
@@ -58,10 +58,10 @@ def extract_drive_id(url: str) -> str:
 
 
 def meta_url() -> str:
-    env = os.environ.get("OYPC_META_URL", "").strip()
+    env = os.environ.get("AISUMMARY_META_URL", "").strip()
     if env:
         return env
-    file_id = os.environ.get("OYPC_META_ID", "").strip() or DEFAULT_META_ID
+    file_id = os.environ.get("AISUMMARY_META_ID", "").strip() or DEFAULT_META_ID
     return drive_download_url(file_id)
 
 
@@ -88,7 +88,7 @@ class Meta:
             notes=str(d.get("notes", "")),
             mandatory=bool(d.get("mandatory", False)),
             installer=Installer(
-                filename=str(inst.get("filename", "OwnYourPC-setup.exe")),
+                filename=str(inst.get("filename", "AISummary-setup.exe")),
                 url=str(inst.get("url", "")),
                 size=int(inst.get("size", 0) or 0),
                 sha256=str(inst.get("sha256", "")),
@@ -212,4 +212,4 @@ def _sanitize(name: str) -> str:
     name = (name or "").strip()
     bad = set('/\\:*?"<>|')
     cleaned = "".join(c for c in name if c not in bad)
-    return cleaned or "OwnYourPC-setup.exe"
+    return cleaned or "AISummary-setup.exe"

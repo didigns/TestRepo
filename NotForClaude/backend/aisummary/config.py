@@ -1,6 +1,6 @@
-"""Central configuration, paths, and tier definitions for OwnYourPC.
+"""Central configuration, paths, and tier definitions for AISummary.
 
-Everything is local-first. Data lives under ~/.ownyourpc by default.
+Everything is local-first. Data lives under ~/.aisummary by default.
 """
 from __future__ import annotations
 
@@ -14,11 +14,12 @@ from typing import Optional
 # quiet noisy first-run HF download warnings (symlinks on Windows, no token)
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
-APP_NAME = "ownyourpc"
-DATA_DIR = Path(os.environ.get("OWNYOURPC_HOME", Path.home() / f".{APP_NAME}"))
+APP_NAME = "aisummary"
+DATA_DIR = Path(os.environ.get("AISUMMARY_HOME", Path.home() / f".{APP_NAME}"))
 DB_DIR = DATA_DIR / "lancedb"
 MODELS_CACHE = DATA_DIR / "models"
 MEETINGS_DIR = DATA_DIR / "meetings"
+SESSIONS_DIR = DATA_DIR / "sessions"
 CONFIG_PATH = DATA_DIR / "config.json"
 
 
@@ -83,6 +84,13 @@ class Settings:
     similarity_threshold: float = 0.25    # below this -> "not found"
     require_citations: bool = True
     telemetry: bool = False               # opt-in, default OFF
+    # --- chat-app bots (ask the Agent from Discord / Slack) ---
+    discord_bot_token: str = ""           # Discord bot token
+    discord_enabled: bool = False         # auto-run the Discord bot on startup
+    slack_bot_token: str = ""             # Slack bot token (xoxb-...)
+    slack_app_token: str = ""             # Slack app-level token (xapp-..., socket mode)
+    slack_enabled: bool = False           # auto-run the Slack bot on startup
+    bot_reply_citations: bool = True      # append source filenames to bot replies
 
     def profile(self) -> TierProfile:
         return TIERS[self.tier]
@@ -101,7 +109,7 @@ class Settings:
 
 
 def ensure_dirs() -> None:
-    for d in (DATA_DIR, DB_DIR, MODELS_CACHE, MEETINGS_DIR):
+    for d in (DATA_DIR, DB_DIR, MODELS_CACHE, MEETINGS_DIR, SESSIONS_DIR):
         d.mkdir(parents=True, exist_ok=True)
 
 

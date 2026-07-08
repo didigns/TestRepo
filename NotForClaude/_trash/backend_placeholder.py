@@ -50,7 +50,7 @@ def _load_token() -> str:
 
 SESSION_TOKEN = _load_token()
 
-app = FastAPI(title="OwnYourPC", version=__version__)
+app = FastAPI(title="AISummary", version=__version__)
 app.add_middleware(
     CORSMiddleware, allow_origins=["http://127.0.0.1", "http://localhost"],
     allow_methods=["*"], allow_headers=["*"],
@@ -123,10 +123,10 @@ if _VENDOR.is_dir():
 def ui():
     """Serve the SPA with the session token injected (same-origin API calls)."""
     if not FRONTEND.exists():
-        return HTMLResponse("<h1>OwnYourPC</h1><p>frontend/index.html 없음</p>")
+        return HTMLResponse("<h1>AISummary</h1><p>frontend/index.html 없음</p>")
     html = FRONTEND.read_text(encoding="utf-8")
     # never cache the shell so UI updates always take effect on reload
-    return HTMLResponse(html.replace("__OWNYOURPC_TOKEN__", SESSION_TOKEN),
+    return HTMLResponse(html.replace("__AISUMMARY_TOKEN__", SESSION_TOKEN),
                         headers={"Cache-Control": "no-store, must-revalidate"})
 
 
@@ -335,6 +335,30 @@ def scan(req: ScanReq, _=Depends(auth)):
     return res
 
 
+@app.post("/ingest/scan-async")
+def scan_async(req: ScanReq, _=Depends(auth)):
+    """Register the folder immediately (so its files show right away with gray
+    'not indexed' dots) and index it in the background. The UI polls /kb to
+    watch dots turn green as each file finishes."""
+    import threading
+    folder = Path(req.folder)
+    if not folder.is_dir():
+        raise HTTPException(400, "folder not found")
+    s: Settings = _state["settings"]
+    if str(folder) not in s.watch_folders:
+        s.watch_folders.append(str(folder))
+        save_settings(s)
+
+    def run():
+        try:
+            _state["ingestor"].scan_folder(folder)
+        except Exception:
+            pass
+
+    threading.Thread(target=run, daemon=True).start()
+    return {"ok": True}
+
+
 @app.post("/pick-folder")
 def pick_folder(_=Depends(auth)):
     """Open the OS-native folder picker on the user's desktop (tkinter runs
@@ -364,6 +388,37 @@ def query(req: QueryReq, _=Depends(auth)):
         "confidence": ans.confidence, "warnings": ans.warnings,
         "citations": [c.__dict__ for c in ans.citations],
     }
+
+
+def _notify_windows(title: str, body: str) -> None:
+    """Pop a native Windows alert with the answer (dependency-free, no-op off
+    Windows). Runs on its own thread since MessageBoxW blocks until dismissed."""
+    import sys
+    if not sys.platform.startswith("win"):
+        return
+    try:
+        import ctypes
+        MB_OK = 0x0
+        MB_ICONINFORMATION = 0x40
+        MB_SETFOREGROUND = 0x10000
+        MB_TOPMOST = 0x40000
+        ctypes.windll.user32.MessageBoxW(
+            0, (body or "(응답 없음)")[:1800], (title or "AISummary")[:120],
+            MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND | MB_TOPMOST)
+    except Exception:
+        pass
+
+
+@app.post("/quick-ask")
+def quick_ask(req: QueryReq, _=Depends(auth)):
+    """Answer a question fired from the Alt+Space quick box, then pop a native
+    Windows alert with the answer. Returns the answer for the caller too."""
+    import threading
+    ans = _state["engine"].query(req.question)
+    text = ans.text or "근거 문서에서 답을 찾지 못했습니다."
+    title = "AISummary — " + (req.question.strip()[:44] or "답변")
+    threading.Thread(target=_notify_windows, args=(title, text), daemon=True).start()
+    return {"answer": text, "refused": ans.refused}
 
 
 @app.post("/meetings/summarize")
@@ -625,8 +680,102 @@ def meeting_delete(sid: str, _=Depends(auth)):
     return {"ok": True}
 
 
+# ---- chat sessions + folders (drag-drop organization) ----------------
+class NewSessionReq(BaseModel):
+    title: Optional[str] = None
+    folder_id: Optional[str] = None
+
+
+class AppendReq(BaseModel):
+    role: str                       # "user" | "assistant"
+    content: str
+    citations: Optional[list] = None
+
+
+class MoveReq(BaseModel):
+    folder_id: Optional[str] = None  # None => move to root
+
+
+class NameReq(BaseModel):
+    name: str
+
+
+@app.get("/sessions/list")
+def sessions_list(_=Depends(auth)):
+    """{folders:[...], sessions:[...]} for the chat-session sidebar."""
+    from .chat_store import list_all
+    return list_all()
+
+
+@app.post("/sessions/create")
+def sessions_create(req: NewSessionReq, _=Depends(auth)):
+    from .chat_store import create_session
+    return create_session(req.title or "새 대화", req.folder_id)
+
+
+@app.get("/sessions/{sid}")
+def sessions_get(sid: str, _=Depends(auth)):
+    from .chat_store import get_session
+    rec = get_session(sid)
+    if not rec:
+        raise HTTPException(404, "session not found")
+    return rec
+
+
+@app.post("/sessions/{sid}/append")
+def sessions_append(sid: str, req: AppendReq, _=Depends(auth)):
+    from .chat_store import append_message
+    if not append_message(sid, req.role, req.content, req.citations):
+        raise HTTPException(404, "session not found")
+    return {"ok": True}
+
+
+@app.post("/sessions/{sid}/rename")
+def sessions_rename(sid: str, req: RenameReq, _=Depends(auth)):
+    from .chat_store import rename_session
+    if not rename_session(sid, req.title):
+        raise HTTPException(404, "session not found")
+    return {"ok": True}
+
+
+@app.post("/sessions/{sid}/move")
+def sessions_move(sid: str, req: MoveReq, _=Depends(auth)):
+    from .chat_store import move_session
+    if not move_session(sid, req.folder_id):
+        raise HTTPException(400, "move failed (session or folder missing)")
+    return {"ok": True}
+
+
+@app.post("/sessions/{sid}/delete")
+def sessions_delete(sid: str, _=Depends(auth)):
+    from .chat_store import delete_session
+    delete_session(sid)
+    return {"ok": True}
+
+
+@app.post("/folders/create")
+def folders_create(req: NameReq, _=Depends(auth)):
+    from .chat_store import create_folder
+    return create_folder(req.name)
+
+
+@app.post("/folders/{fid}/rename")
+def folders_rename(fid: str, req: NameReq, _=Depends(auth)):
+    from .chat_store import rename_folder
+    if not rename_folder(fid, req.name):
+        raise HTTPException(404, "folder not found")
+    return {"ok": True}
+
+
+@app.post("/folders/{fid}/delete")
+def folders_delete(fid: str, _=Depends(auth)):
+    from .chat_store import delete_folder
+    delete_folder(fid)
+    return {"ok": True}
+
+
 def print_token():
-    print(f"OWNYOURPC_TOKEN={SESSION_TOKEN}")
+    print(f"AISUMMARY_TOKEN={SESSION_TOKEN}")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-# OwnYourPC
+# AISummary
 
 **100% 로컬** 문서 RAG Q&A + 실시간 회의 전사/회의록 데스크톱 제품. 클라우드 전송 0, 프라이버시 우선.
 
@@ -15,13 +15,13 @@
 
 | 모듈 | 파일 | 상태 |
 |------|------|------|
-| 하드웨어 감지 + 모델 선택 | `ownyourpc/hardware.py` | ✅ 동작 (deps 없이 실행) |
-| 설정 / 티어 | `ownyourpc/config.py` | ✅ |
-| LLM/임베딩 provider (Ollama) | `ownyourpc/llm.py` | ✅ |
-| 인제스천 (watch·parse·chunk·embed) | `ownyourpc/ingest/` | ✅ |
-| RAG 엔진 (grounding·citation·게이팅) | `ownyourpc/rag/` | ✅ (NumPy 폴백으로 테스트 가능) |
-| 회의 전사/요약/PDF | `ownyourpc/meetings/` | ✅ 스캐폴드 |
-| FastAPI 로컬 서비스 | `ownyourpc/api.py` | ✅ |
+| 하드웨어 감지 + 모델 선택 | `aisummary/hardware.py` | ✅ 동작 (deps 없이 실행) |
+| 설정 / 티어 | `aisummary/config.py` | ✅ |
+| LLM/임베딩 provider (Ollama) | `aisummary/llm.py` | ✅ |
+| 인제스천 (watch·parse·chunk·embed) | `aisummary/ingest/` | ✅ |
+| RAG 엔진 (grounding·citation·게이팅) | `aisummary/rag/` | ✅ (NumPy 폴백으로 테스트 가능) |
+| 회의 전사/요약/PDF | `aisummary/meetings/` | ✅ 스캐폴드 |
+| FastAPI 로컬 서비스 | `aisummary/api.py` | ✅ |
 
 후속: 실시간 WebSocket 자막, 골든셋 평가 하니스, Tauri UI 셸, 인스톨러 (ARCHITECTURE.md §10 로드맵).
 
@@ -35,18 +35,18 @@ cd backend
 pip install -r requirements.txt
 
 # 2) GGUF 모델 다운로드 (gemma-4-E4B + nomic-embed, 하드웨어 티어에 맞게)
-python -m ownyourpc.cli pull
+python -m aisummary.cli pull
 
 # 3) 환경 점검 (하드웨어·백엔드·모델·생성 프로브)
-python -m ownyourpc.cli doctor
+python -m aisummary.cli doctor
 
 # 4) 서비스 실행 — 자동 재시작 슈퍼바이저 권장 (크래시 시 자동 복구)
 python run.py
-#    (단순 실행: python -m ownyourpc.api)
-#    크래시 로그: ~/.ownyourpc/server.log
+#    (단순 실행: python -m aisummary.api)
+#    크래시 로그: ~/.aisummary/server.log
 ```
 
-> Ollama 백엔드를 선호하면 `~/.ownyourpc/config.json` 에서 `"backend": "ollama"` 로
+> Ollama 백엔드를 선호하면 `~/.aisummary/config.json` 에서 `"backend": "ollama"` 로
 > 바꾸고 `ollama pull gemma4:e4b && ollama pull nomic-embed-text` 를 실행하세요.
 
 ## 빠른 사용 (CLI — 주인 PC에서 실행)
@@ -57,25 +57,25 @@ python run.py
 cd backend
 
 # 0) 환경 점검 (하드웨어·티어·Ollama·모델 확인)
-python -m ownyourpc.cli doctor
+python -m aisummary.cli doctor
 
 # 1) 필요 모델 자동 설치 (gemma4:e4b + nomic-embed-text 등 티어별)
-python -m ownyourpc.cli pull
+python -m aisummary.cli pull
 
 # 2) 폴더 벡터화
-python -m ownyourpc.cli ingest "C:\path\to\docs"
+python -m aisummary.cli ingest "C:\path\to\docs"
 
 # 3) 근거 인용 질의 (없으면 '찾을 수 없습니다' 거부)
-python -m ownyourpc.cli ask "계약 만료일은?"
+python -m aisummary.cli ask "계약 만료일은?"
 
 # 4) 실측 품질 점수 (골든셋, PASS 기준 >=85)
-python -m ownyourpc.cli eval
+python -m aisummary.cli eval
 
 # 5) 회의록 요약 + PDF 생성 (저장된 전사에서)
-python -m ownyourpc.cli meeting path\to\transcript.json
+python -m aisummary.cli meeting path\to\transcript.json
 
 # 6) 실시간 회의: 마이크 녹음 → 라이브 자막 → 종료(Enter) → 요약 + PDF
-python -m ownyourpc.cli meeting-live --title "주간 회의"
+python -m aisummary.cli meeting-live --title "주간 회의"
 ```
 
 > 실시간 회의는 `sounddevice`(마이크)가 필요합니다: `pip install sounddevice`.
@@ -97,7 +97,7 @@ python scripts/smoke_test.py
 
 ```bash
 cd backend
-python -m ownyourpc.api        # 127.0.0.1:8756 서비스 시작
+python -m aisummary.api        # 127.0.0.1:8756 서비스 시작
 ```
 
 브라우저에서 `http://127.0.0.1:8756` 열기. 문서 Q&A(근거 인용), 실시간 회의(라이브 자막→요약→PDF), 설정(하드웨어/티어) 탭이 있습니다. 세션 토큰은 페이지에 자동 주입됩니다.

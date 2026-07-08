@@ -1,13 +1,13 @@
-﻿# OwnYourPC — uninstaller. Removes the install dir, shortcuts, and registry.
+﻿# AISummary — uninstaller. Removes the install dir, shortcuts, and registry.
 [CmdletBinding()]
 param(
-    [string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'Programs\OwnYourPC')
+    [string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'Programs\AISummary')
 )
 $ErrorActionPreference = 'SilentlyContinue'
-$AppName = 'OwnYourPC'
+$AppName = 'AISummary'
 function Log($m) { Write-Host "[uninstall] $m" }
 
-Get-Process -Name 'OwnYourPC' | Stop-Process -Force
+Get-Process -Name 'AISummary' | Stop-Process -Force
 Start-Sleep -Milliseconds 400
 
 # Shortcuts
@@ -23,4 +23,4 @@ if (Test-Path $InstallDir) {
     $cmd = "Start-Sleep 1; Remove-Item -LiteralPath `"$InstallDir`" -Recurse -Force"
     Start-Process powershell -ArgumentList "-WindowStyle Hidden -ExecutionPolicy Bypass -Command `"$cmd`""
 }
-Log "제거 완료. 사용자 데이터(~/.ownyourpc)는 유지됩니다."
+Log "제거 완료. 사용자 데이터(~/.aisummary)는 유지됩니다."

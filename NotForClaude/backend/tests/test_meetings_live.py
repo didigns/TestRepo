@@ -10,10 +10,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import numpy as np
 
-from ownyourpc.config import Settings
-from ownyourpc.meetings.transcribe import Segment
-from ownyourpc.meetings.streaming import StreamingTranscriber
-from ownyourpc.meetings.capture import save_wav, SAMPLE_RATE
+from aisummary.config import Settings
+from aisummary.meetings.transcribe import Segment
+from aisummary.meetings.streaming import StreamingTranscriber
+from aisummary.meetings.capture import save_wav, SAMPLE_RATE
 
 
 def _fake_fn_factory():
@@ -69,7 +69,7 @@ def test_save_wav_writes_valid_pcm(tmp_path):
 def test_run_live_meeting_with_fakes():
     """End-to-end orchestration with a fake capture + fake transcriber."""
     import threading
-    from ownyourpc.meetings.streaming import run_live_meeting
+    from aisummary.meetings.streaming import run_live_meeting
 
     class FakeCapture:
         def __init__(self):

@@ -1,4 +1,4 @@
-﻿# OwnYourPC — build the private Python runtime that ships inside the app.
+﻿# AISummary — build the private Python runtime that ships inside the app.
 #
 # Downloads a relocatable "python-build-standalone" CPython (has pip + venv +
 # ssl, fully self-contained), extracts it, and pip-installs the backend
@@ -33,10 +33,17 @@ if (-not $here) { $here = Split-Path -Parent $MyInvocation.MyCommand.Definition 
 if (-not $Requirements) { $Requirements = Join-Path $here "..\..\backend\requirements.txt" }
 if (-not $OutDir) { $OutDir = Join-Path $here "..\runtime" }
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-function Log($m) { Write-Host "[runtime] $m" -ForegroundColor Cyan }
+# Colored console output can throw IndexOutOfRangeException when the host has no
+# real console buffer (redirected output / some terminals). Write-Say degrades
+# gracefully to plain text instead of crashing the build.
+function Write-Say([string]$Message, [string]$Color = $null) {
+    try { if ($Color) { Write-Host $Message -ForegroundColor $Color } else { Write-Host $Message } }
+    catch { try { [Console]::WriteLine($Message) } catch {} }
+}
+function Log($m) { Write-Say "[runtime] $m" 'Cyan' }
 
 $OutDir = [System.IO.Path]::GetFullPath($OutDir)
-$work = Join-Path $env:TEMP ("oypc_rt_" + [guid]::NewGuid().ToString('N'))
+$work = Join-Path $env:TEMP ("aisummary_rt_" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path $work | Out-Null
 
 try {
@@ -44,7 +51,7 @@ try {
     if (-not $PythonUrl) {
         Log "최신 python-build-standalone 릴리스 조회"
         $api = "https://api.github.com/repos/astral-sh/python-build-standalone/releases/latest"
-        $rel = Invoke-RestMethod -Uri $api -Headers @{ "User-Agent" = "OwnYourPC" }
+        $rel = Invoke-RestMethod -Uri $api -Headers @{ "User-Agent" = "AISummary" }
         $pat = "cpython-$([regex]::Escape($PyVersion))\..*-x86_64-pc-windows-msvc-install_only\.tar\.gz$"
         $asset = $rel.assets |
             Where-Object { $_.name -match $pat -and $_.name -notmatch "install_only_stripped" } |
@@ -84,6 +91,9 @@ try {
 
     # --- 5) Slim the runtime (strip unused Qt, dev deps, caches) -----------
     & (Join-Path $here 'trim-runtime.ps1') -Runtime $OutDir
+
+    # --- 6) Brand the Python host exes so Task Manager shows "AISummary" ---
+    & (Join-Path $here 'brand-runtime.ps1') -Runtime $OutDir
 
     $size = [math]::Round((Get-ChildItem $OutDir -Recurse -File | Measure-Object Length -Sum).Sum / 1MB, 0)
     Log "완료: 런타임 크기 약 ${size} MB"

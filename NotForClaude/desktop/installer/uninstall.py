@@ -1,4 +1,4 @@
-"""OwnYourPC — uninstaller (PySide6 confirm + removal).
+"""AISummary — uninstaller (PySide6 confirm + removal).
 
 Registered in Add/Remove Programs; run on the app's private runtime:
     <InstallDir>\\runtime\\pythonw.exe <InstallDir>\\installer\\uninstall.py
@@ -16,7 +16,7 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication, QMessageBox
 
-APP_NAME = "OwnYourPC"
+APP_NAME = "AISummary"
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 DETACHED = 0x00000008 if os.name == "nt" else 0
 
@@ -63,7 +63,7 @@ def remove_registry():
 def stop_processes():
     if os.name != "nt":
         return
-    for name in ("OwnYourPC.exe",):
+    for name in ("AISummary.exe",):
         subprocess.run(["taskkill", "/F", "/IM", name],
                        creationflags=CREATE_NO_WINDOW,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -85,7 +85,7 @@ def main():
     ans = QMessageBox.question(
         None, f"{APP_NAME} 제거",
         f"{APP_NAME}를 제거할까요?\n\n설치 폴더:\n{dest}\n\n"
-        "(사용자 데이터 ~/.ownyourpc 는 유지됩니다.)",
+        "(사용자 데이터 ~/.aisummary 는 유지됩니다.)",
         QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
     )
     if ans != QMessageBox.Yes:

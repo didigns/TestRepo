@@ -7,11 +7,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from ownyourpc.config import Settings, TIERS
-from ownyourpc.hardware import HardwareInfo, GPUInfo, select_tier
-from ownyourpc.ingest.chunker import chunk_blocks
-from ownyourpc.rag.vectorstore import VectorStore
-from ownyourpc.rag.engine import RagEngine, REFUSAL
+from aisummary.config import Settings, TIERS
+from aisummary.hardware import HardwareInfo, GPUInfo, select_tier
+from aisummary.ingest.chunker import chunk_blocks
+from aisummary.rag.vectorstore import VectorStore
+from aisummary.rag.engine import RagEngine, REFUSAL
 
 
 # ---- hardware tier selection ----------------------------------------
@@ -74,12 +74,12 @@ class FakeProvider:
 
 
 def _store_with(settings, texts):
-    from ownyourpc.ingest.chunker import Chunk
+    from aisummary.ingest.chunker import Chunk
     store = VectorStore.__new__(VectorStore)
     store.settings = settings
     store.dim = 8
     store._db = store._tbl = None
-    from ownyourpc.rag.vectorstore import _NumpyStore
+    from aisummary.rag.vectorstore import _NumpyStore
     store._fallback = _NumpyStore()
     prov = FakeProvider(settings)
     chunks, vecs = [], []

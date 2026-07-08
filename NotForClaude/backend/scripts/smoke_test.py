@@ -17,12 +17,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from ownyourpc.config import load_settings
-from ownyourpc.providers import make_provider
-from ownyourpc.rag.vectorstore import VectorStore
-from ownyourpc.rag.engine import RagEngine
-from ownyourpc.ingest.watcher import Ingestor
-from ownyourpc.rag.evaluate import evaluate, GoldenCase
+from aisummary.config import load_settings
+from aisummary.providers import make_provider
+from aisummary.rag.vectorstore import VectorStore
+from aisummary.rag.engine import RagEngine
+from aisummary.ingest.watcher import Ingestor
+from aisummary.rag.evaluate import evaluate, GoldenCase
 
 SAMPLE_DOC = """\
 서비스 계약서 (요약)

@@ -1,10 +1,10 @@
-"""OwnYourPC — Qt (PySide6) install wizard.
+"""AISummary — Qt (PySide6) install wizard.
 
 Run by the setup.exe bootstrapper on the app's private runtime:
     runtime\\pythonw.exe installer\\install.py --payload <extracted_dir>
 
 The <payload> dir holds the already-extracted app files:
-    runtime/  backend/  frontend/  icons/  launcher/  OwnYourPC.exe
+    runtime/  backend/  frontend/  icons/  launcher/  AISummary.exe
     installer/install.py  installer/uninstall.py  version.txt
 
 The wizard copies those into the install location, creates shortcuts that
@@ -32,8 +32,8 @@ from PySide6.QtWidgets import (
     QGraphicsDropShadowEffect, QFrame, QMessageBox,
 )
 
-APP_NAME = "OwnYourPC"
-PUBLISHER = "OwnYourPC"
+APP_NAME = "AISummary"
+PUBLISHER = "AISummary"
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
 # ---- theme ---------------------------------------------------------------
@@ -136,11 +136,25 @@ class Installer(QObject):
     def _stop_running(self):
         if os.name != "nt":
             return
-        for name in ("OwnYourPC.exe", "pythonw.exe"):
+        own_pid = str(os.getpid())
+        # Close a previously-installed instance before overwriting files.
+        # CRITICAL: the installer itself runs as pythonw.exe with the window
+        # title "AISummary 설치", so a broad `taskkill /IM pythonw.exe /FI
+        # "WINDOWTITLE eq AISummary*"` would kill the wizard's own process (it
+        # matched "AISummary 설치"). We therefore always exclude our own PID and
+        # match the app window title exactly (no wildcard).
+        jobs = [
+            # The Tauri app: the installer is never this image name.
+            ["taskkill", "/F", "/IM", "AISummary.exe", "/FI", f"PID ne {own_pid}"],
+            # The launcher runs under pythonw.exe — exclude ourselves.
+            ["taskkill", "/F", "/IM", "pythonw.exe",
+             "/FI", f"PID ne {own_pid}",
+             "/FI", f"WINDOWTITLE eq {APP_NAME}"],
+        ]
+        for cmd in jobs:
             try:
-                subprocess.run(["taskkill", "/F", "/IM", name, "/FI",
-                                f"WINDOWTITLE eq {APP_NAME}*"],
-                               creationflags=CREATE_NO_WINDOW,
+                subprocess.run(cmd, creationflags=CREATE_NO_WINDOW,
+                               stdin=subprocess.DEVNULL,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except Exception:  # noqa: BLE001
                 pass
@@ -166,11 +180,12 @@ class Installer(QObject):
                 f"$s.Arguments='{args}';"
                 f"$s.WorkingDirectory='{workdir}';"
                 f"$s.IconLocation='{icon}';"
-                f"$s.Description='OwnYourPC — 로컬 문서 RAG + 회의록';"
+                f"$s.Description='AISummary — 로컬 문서 RAG + 회의록';"
                 "$s.Save()"
             )
             subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
                             "-Command", ps], creationflags=CREATE_NO_WINDOW,
+                           stdin=subprocess.DEVNULL,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         appdata = os.environ.get("APPDATA", "")
@@ -373,7 +388,7 @@ class Wizard(QWidget):
         h = QLabel("설치가 완료되었습니다")
         h.setObjectName("h1")
         l.addWidget(h)
-        p = QLabel("시작 메뉴 또는 바탕화면에서 OwnYourPC를 실행할 수 있습니다.")
+        p = QLabel("시작 메뉴 또는 바탕화면에서 AISummary를 실행할 수 있습니다.")
         p.setObjectName("muted")
         p.setWordWrap(True)
         l.addWidget(p)
@@ -500,7 +515,57 @@ class Wizard(QWidget):
         self._drag = None
 
 
+def _setup_diag():
+    """Best-effort crash logging. The installer is launched by setup.exe via
+    pythonw.exe, which has no console: without this, an uncaught error just
+    makes the window vanish with no clue. Writes to %LOCALAPPDATA%\\AISummary\\
+    install.log and shows a dialog. Never raises."""
+    try:
+        import faulthandler
+        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+        d = Path(base) / APP_NAME
+        d.mkdir(parents=True, exist_ok=True)
+        log = open(d / "install.log", "a", encoding="utf-8", buffering=1)
+        # Under pythonw.exe sys.stdout/sys.stderr are None; give them a sink so
+        # any stray write can't crash us.
+        if sys.stdout is None:
+            sys.stdout = log
+        if sys.stderr is None:
+            sys.stderr = log
+        faulthandler.enable(log)
+
+        def _hook(t, v, tb):
+            import traceback as _tb
+            log.write("\n=== UNCAUGHT EXCEPTION ===\n")
+            _tb.print_exception(t, v, tb, file=log)
+            log.flush()
+            try:
+                QMessageBox.critical(None, APP_NAME,
+                                     "".join(_tb.format_exception(t, v, tb)))
+            except Exception:
+                pass
+
+        sys.excepthook = _hook
+
+        try:
+            import threading
+
+            def _thook(args):
+                import traceback as _tb
+                log.write("\n=== UNCAUGHT EXCEPTION (thread) ===\n")
+                _tb.print_exception(args.exc_type, args.exc_value,
+                                    args.exc_traceback, file=log)
+                log.flush()
+
+            threading.excepthook = _thook
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
 def main():
+    _setup_diag()
     ap = argparse.ArgumentParser()
     ap.add_argument("--payload", required=True, help="extracted payload dir")
     args = ap.parse_args()

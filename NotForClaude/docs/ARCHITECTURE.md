@@ -1,4 +1,4 @@
-# OwnYourPC — Architecture & Design Blueprint
+# AISummary — Architecture & Design Blueprint
 
 > **한 줄 요약**: 사용자 PC 안에서 100% 로컬로 도는, 문서 RAG Q&A + 실시간 회의 전사/회의록 생성을 제공하는 프라이버시-우선 데스크톱 제품. 클라우드 전송 0, SaaS급 UX.
 
@@ -88,7 +88,7 @@
               └──────────────────────────────┘  └──────────┘
 ```
 
-모든 데이터는 `~/.ownyourpc/`(사용자 홈)에 저장. 네트워크 나가는 트래픽 없음(Ollama도 로컬).
+모든 데이터는 `~/.aisummary/`(사용자 홈)에 저장. 네트워크 나가는 트래픽 없음(Ollama도 로컬).
 
 ---
 
@@ -148,7 +148,7 @@
 
 - **로컬-온리**: 외부 네트워크 호출 없음. 방화벽 규칙 문서화. 텔레메트리 옵트인·기본 끔.
 - **API 인증**: FastAPI는 127.0.0.1 바인딩 + 세션 토큰(셸이 생성). CORS 잠금.
-- **저장 데이터**: `~/.ownyourpc/` 권한 제한. 선택적 at-rest 암호화(사용자 비밀번호 → 키 파생).
+- **저장 데이터**: `~/.aisummary/` 권한 제한. 선택적 at-rest 암호화(사용자 비밀번호 → 키 파생).
 - **입력 안전**: 파싱 시 경로 탈출·심볼릭링크·과대 파일 방어. PDF 폭탄/외부 엔티티 차단.
 - **의존성**: SBOM 생성, `pip-audit`로 취약점 스캔.
 - **PII**: 데이터는 사용자 소유. 모델이 로컬이므로 프롬프트 유출 없음.
@@ -174,10 +174,10 @@
 ## 9. 리포지토리 구조
 
 ```
-OwnYourPC/
+AISummary/
 ├── docs/ARCHITECTURE.md          ← 본 문서
 ├── backend/
-│   ├── ownyourpc/
+│   ├── aisummary/
 │   │   ├── config.py             모든 설정·경로·티어
 │   │   ├── hardware.py           하드웨어 감지 + 모델 선택
 │   │   ├── llm.py                Ollama provider 추상화

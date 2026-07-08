@@ -1,4 +1,4 @@
-// OwnYourPC auto-updater.
+// AISummary auto-updater.
 //
 // On app startup we fetch a small `.meta` JSON hosted on Google Drive. It
 // carries the latest version string and a Drive link to the full installer
@@ -7,8 +7,8 @@
 // it, and exit so it can replace the installed files.
 //
 // The `.meta` file id and (optionally) the meta URL are configurable:
-//   - OYPC_META_URL   full URL to the .meta (overrides everything)
-//   - OYPC_META_ID    Drive file id of the .meta
+//   - AISUMMARY_META_URL   full URL to the .meta (overrides everything)
+//   - AISUMMARY_META_ID    Drive file id of the .meta
 // Default is the file id baked in below.
 
 use std::io::Read;
@@ -44,7 +44,7 @@ pub struct Installer {
 }
 
 fn default_filename() -> String {
-    "OwnYourPC-setup.exe".to_string()
+    "AISummary-setup.exe".to_string()
 }
 
 /// Build a direct-download URL for a Google Drive file id. Uses the
@@ -78,12 +78,12 @@ fn extract_drive_id(url: &str) -> String {
 }
 
 fn meta_url() -> String {
-    if let Ok(u) = std::env::var("OYPC_META_URL") {
+    if let Ok(u) = std::env::var("AISUMMARY_META_URL") {
         if !u.trim().is_empty() {
             return u;
         }
     }
-    let id = std::env::var("OYPC_META_ID").unwrap_or_else(|_| DEFAULT_META_ID.to_string());
+    let id = std::env::var("AISUMMARY_META_ID").unwrap_or_else(|_| DEFAULT_META_ID.to_string());
     drive_download_url(&id)
 }
 
@@ -187,7 +187,7 @@ fn sanitize(name: &str) -> String {
         .filter(|c| !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'))
         .collect();
     if cleaned.is_empty() {
-        "OwnYourPC-setup.exe".to_string()
+        "AISummary-setup.exe".to_string()
     } else {
         cleaned
     }
@@ -224,7 +224,7 @@ pub fn run_startup_check(current: &str, silent: bool) {
             if !silent {
                 MessageDialog::new()
                     .set_level(MessageLevel::Warning)
-                    .set_title("OwnYourPC 업데이트")
+                    .set_title("AISummary 업데이트")
                     .set_description(format!("업데이트 확인 실패:\n{e}"))
                     .show();
             }
@@ -235,7 +235,7 @@ pub fn run_startup_check(current: &str, silent: bool) {
     if !is_newer(&meta.version, current) {
         if !silent {
             MessageDialog::new()
-                .set_title("OwnYourPC 업데이트")
+                .set_title("AISummary 업데이트")
                 .set_description(format!("최신 버전입니다 (v{current})."))
                 .show();
         }
@@ -249,7 +249,7 @@ pub fn run_startup_check(current: &str, silent: bool) {
     );
     let answer = MessageDialog::new()
         .set_level(MessageLevel::Info)
-        .set_title("OwnYourPC 업데이트")
+        .set_title("AISummary 업데이트")
         .set_description(prompt)
         .set_buttons(MessageButtons::YesNo)
         .show();
@@ -263,7 +263,7 @@ pub fn run_startup_check(current: &str, silent: bool) {
             if let Err(e) = launch_installer(&path) {
                 MessageDialog::new()
                     .set_level(MessageLevel::Error)
-                    .set_title("OwnYourPC 업데이트")
+                    .set_title("AISummary 업데이트")
                     .set_description(e)
                     .show();
                 return;
@@ -276,7 +276,7 @@ pub fn run_startup_check(current: &str, silent: bool) {
         Err(e) => {
             MessageDialog::new()
                 .set_level(MessageLevel::Error)
-                .set_title("OwnYourPC 업데이트")
+                .set_title("AISummary 업데이트")
                 .set_description(format!("다운로드 실패:\n{e}"))
                 .show();
         }

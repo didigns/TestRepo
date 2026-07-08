@@ -1,4 +1,4 @@
-﻿# OwnYourPC — slim down the private Python runtime.
+﻿# AISummary — slim down the private Python runtime.
 #
 # The app only uses PySide6's QtCore/QtGui/QtWidgets, but pip installs the full
 # Qt (WebEngine/Chromium, QML/Quick, 3D, Multimedia, Designer, translations…).
@@ -16,7 +16,14 @@ $here = $PSScriptRoot
 if (-not $here) { $here = Split-Path -Parent $MyInvocation.MyCommand.Definition }
 if (-not $Runtime) { $Runtime = Join-Path $here "..\runtime" }
 $Runtime = [System.IO.Path]::GetFullPath($Runtime)
-function Log($m) { Write-Host "[trim] $m" -ForegroundColor Cyan }
+# Colored console output can throw IndexOutOfRangeException when the host has no
+# real console buffer (redirected output / some terminals). Write-Say degrades
+# gracefully to plain text instead of crashing the build.
+function Write-Say([string]$Message, [string]$Color = $null) {
+    try { if ($Color) { Write-Host $Message -ForegroundColor $Color } else { Write-Host $Message } }
+    catch { try { [Console]::WriteLine($Message) } catch {} }
+}
+function Log($m) { Write-Say "[trim] $m" 'Cyan' }
 
 if (-not (Test-Path (Join-Path $Runtime 'python.exe'))) { throw "런타임 없음: $Runtime" }
 $before = [math]::Round((Get-ChildItem $Runtime -Recurse -File | Measure-Object Length -Sum).Sum / 1MB, 0)

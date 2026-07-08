@@ -1,21 +1,38 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "OwnYourPC",
-  "version": "0.1.0",
-  "identifier": "com.ownyourpc.app",
+  "productName": "AISummary",
+  "version": "0.2.0",
+  "identifier": "com.aisummary.app",
   "build": {
     "frontendDist": "../../frontend"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "label": "main",
-        "title": "OwnYourPC",
+        "title": "AISummary",
         "width": 1040,
         "height": 760,
         "minWidth": 820,
         "minHeight": 560,
-        "url": "http://127.0.0.1:8756"
+        "url": "http://127.0.0.1:8756",
+        "dragDropEnabled": false
+      },
+      {
+        "label": "quick",
+        "title": "AISummary Quick Ask",
+        "width": 640,
+        "height": 92,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "center": true,
+        "url": "http://127.0.0.1:8756/?quick=1",
+        "dragDropEnabled": false
       }
     ],
     "security": {

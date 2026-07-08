@@ -1,11 +1,11 @@
-"""OwnYourPC server supervisor.
+"""AISummary server supervisor.
 
 Runs the local server and automatically restarts it if it crashes (native
 library segfaults in llama.cpp / ctranslate2 / soundcard can take the whole
 process down — this keeps the app alive). Crash output is captured to
-~/.ownyourpc/server.log so failures can be diagnosed.
+~/.aisummary/server.log so failures can be diagnosed.
 
-Use this instead of `python -m ownyourpc.api`:
+Use this instead of `python -m aisummary.api`:
 
     cd backend
     python run.py
@@ -18,12 +18,12 @@ import sys
 import time
 from pathlib import Path
 
-LOG = Path.home() / ".ownyourpc" / "server.log"
+LOG = Path.home() / ".aisummary" / "server.log"
 
 
 def main() -> None:
     LOG.parent.mkdir(parents=True, exist_ok=True)
-    print(f"[supervisor] OwnYourPC — auto-restart on. 로그: {LOG}")
+    print(f"[supervisor] AISummary — auto-restart on. 로그: {LOG}")
     backoff = 2
     while True:
         started = time.time()
@@ -32,7 +32,7 @@ def main() -> None:
                       f"===== server start =====\n")
             log.flush()
             # capture stdout+stderr to the log so a crash traceback is kept
-            proc = subprocess.Popen([sys.executable, "-m", "ownyourpc.api"],
+            proc = subprocess.Popen([sys.executable, "-m", "aisummary.api"],
                                     stdout=log, stderr=subprocess.STDOUT)
             try:
                 code = proc.wait()

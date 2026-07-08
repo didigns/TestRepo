@@ -1,4 +1,4 @@
-"""OwnYourPC — local-first document RAG + meeting transcription.
+"""AISummary — local-first document RAG + meeting transcription.
 
 100% on-device. No cloud. See docs/ARCHITECTURE.md.
 """

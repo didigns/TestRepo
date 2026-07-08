@@ -4,9 +4,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from ownyourpc.config import Settings
-from ownyourpc.rag.hybrid import tokenize, BM25, reciprocal_rank_fusion
-from ownyourpc.rag.engine import RagEngine
+from aisummary.config import Settings
+from aisummary.rag.hybrid import tokenize, BM25, reciprocal_rank_fusion
+from aisummary.rag.engine import RagEngine
 from test_core import _store_with, FakeProvider
 
 

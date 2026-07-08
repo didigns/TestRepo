@@ -1,4 +1,4 @@
-﻿# OwnYourPC — one-command build + deploy.
+﻿# AISummary — one-command build + deploy.
 #
 # Full release pipeline:
 #   1. Sync $Version into Cargo.toml + tauri.conf.json
@@ -36,7 +36,14 @@ $installer = Join-Path $here 'installer'
 $tauriDir  = Join-Path $here 'src-tauri'
 $runtime   = Join-Path $here 'runtime'
 $noBom = New-Object System.Text.UTF8Encoding($false)
-function Step($m) { Write-Host "`n=== $m ===" -ForegroundColor Green }
+# Colored console output can throw IndexOutOfRangeException when the host has no
+# real console buffer (redirected output / some terminals). Write-Say degrades
+# gracefully to plain text instead of crashing the build.
+function Write-Say([string]$Message, [string]$Color = $null) {
+    try { if ($Color) { Write-Host $Message -ForegroundColor $Color } else { Write-Host $Message } }
+    catch { try { [Console]::WriteLine($Message) } catch {} }
+}
+function Step($m) { Write-Say "`n=== $m ===" 'Green' }
 
 # --- 1) version sync (no BOM: cargo/serde_json reject a BOM) --------------
 Step "버전 동기화 → $Version"
@@ -57,7 +64,7 @@ if (-not $SkipTauri) {
         if ($LASTEXITCODE -ne 0) { throw "cargo build 실패 (exit $LASTEXITCODE)" }
     } finally { Pop-Location }
 } else {
-    Write-Host "Tauri 빌드 건너뜀 (-SkipTauri)" -ForegroundColor Yellow
+    Write-Say "Tauri 빌드 건너뜀 (-SkipTauri)" 'Yellow'
 }
 
 # --- 3) private Python runtime -------------------------------------------
@@ -65,7 +72,7 @@ if ($RebuildRuntime -or -not (Test-Path (Join-Path $runtime 'python.exe'))) {
     Step "Python 런타임 빌드 (Python $PyVersion + 백엔드 deps + 슬리밍)"
     & (Join-Path $installer 'prepare-runtime.ps1') -PyVersion $PyVersion
 } else {
-    Write-Host "런타임 재사용: $runtime  (재빌드: -RebuildRuntime)" -ForegroundColor Yellow
+    Write-Say "런타임 재사용: $runtime  (재빌드: -RebuildRuntime)" 'Yellow'
 }
 
 # --- 4 & 5) package + deploy ---------------------------------------------
@@ -76,4 +83,4 @@ if ($InstallerUrl) { $relArgs.InstallerUrl = $InstallerUrl }
 if ($DriveDir)     { $relArgs.DriveDir = $DriveDir }
 & (Join-Path $installer 'release.ps1') @relArgs
 
-Write-Host "`n[OK] v$Version 빌드 및 배포 완료" -ForegroundColor Green
+Write-Say "`n[OK] v$Version 빌드 및 배포 완료" 'Green'
