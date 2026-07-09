@@ -1,0 +1,135 @@
+{
+  "manifestVersion": 1,
+  "id": "interactive-fiction",
+  "name": "인터랙티브 소설",
+  "version": "0.2.0",
+  "author": "AISummary",
+  "description": "주인공 상태창이 있는 각본형 인터랙티브 소설. 선택이 체력·정신력·평판에 반영되고 결말이 갈립니다. (flow-DSL 크리에이티브 데모)",
+  "permissions": {
+    "folders": [],
+    "network": false,
+    "capabilities": ["model:generate", "ui:render"]
+  },
+  "contributes": {
+    "mode": {
+      "label": "인터랙티브 소설",
+      "icon": "📖",
+      "persona": "너는 몰입감 있는 심리 호러 인터랙티브 소설의 진행자야. 2인칭 시점, 생생하고 절제된 묘사, 한국어. 매 장면은 짧게(3~5문장) 쓰고 과하게 설명하지 마. 주인공의 이름과 상태(체력/정신력/평판)를 자연스럽게 이야기에 녹여라.",
+      "status": {
+        "title": "주인공 상태",
+        "rows": [
+          { "label": "이름", "value": "{{name}}" },
+          { "label": "현재 위치", "value": "{{location}}" },
+          { "label": "체력", "value": "{{hp}}", "bar": { "max": 100 } },
+          { "label": "정신력", "value": "{{sanity}}", "bar": { "max": 100 } },
+          { "label": "평판", "value": "{{reputation}}", "bar": { "max": 100 } },
+          { "label": "단서", "value": "{{clues}}" }
+        ]
+      },
+      "flow": {
+        "start": "askName",
+        "steps": {
+          "askName": {
+            "type": "input",
+            "label": "주인공의 이름을 지어주세요.",
+            "placeholder": "예: 이서준",
+            "into": "name",
+            "next": "initStats"
+          },
+          "initStats": {
+            "type": "set",
+            "vars": {
+              "hp": { "expr": "100" },
+              "sanity": { "expr": "100" },
+              "reputation": { "expr": "50" },
+              "clues": { "expr": "0" },
+              "location": "저택 정문"
+            },
+            "next": "intro"
+          },
+          "intro": {
+            "type": "generate",
+            "grounded": false,
+            "prompt": "주인공의 이름은 {{name}}. 폭풍우 치는 밤, {{name}}이(가) 낯선 저택 앞에 도착한 도입부를 3~4문장으로 써줘. 마지막은 긴장감 있게.",
+            "into": "scene",
+            "next": "c1"
+          },
+          "c1": {
+            "type": "choice",
+            "prompt": "무엇을 할까?",
+            "options": [
+              { "label": "🚪 정문을 두드린다 (평판 +10)", "set": { "act": "정문을 두드렸다", "reputation": { "expr": "reputation+10" }, "location": "현관 앞" }, "goto": "beat" },
+              { "label": "🪟 창문으로 몰래 들여다본다 (정신력 -15, 단서 +1)", "set": { "act": "창문으로 몰래 안을 들여다봤다", "sanity": { "expr": "sanity-15" }, "clues": { "expr": "clues+1" }, "location": "저택 측면" }, "goto": "beat" },
+              { "label": "🌲 담을 넘어 뒷마당으로 간다 (체력 -20, 단서 +1)", "set": { "act": "담을 넘어 뒷마당으로 들어갔다", "hp": { "expr": "hp-20" }, "clues": { "expr": "clues+1" }, "location": "뒷마당" }, "goto": "beat" }
+            ]
+          },
+          "beat": {
+            "type": "generate",
+            "grounded": false,
+            "prompt": "이전 장면: {{scene}}\n{{name}}은(는) 방금 이렇게 했다: {{act}} (현재 위치: {{location}}).\n그 선택에 따른 다음 전개를 4~5문장으로 이어 써. 새로운 긴장 요소를 하나 등장시키고, 위험한 순간을 만들어라.",
+            "into": "scene2",
+            "next": "c2"
+          },
+          "c2": {
+            "type": "choice",
+            "prompt": "위험이 닥쳤다. 어떻게 대응할까?",
+            "options": [
+              { "label": "⚔️ 정면으로 맞선다 (체력 -30)", "set": { "act": "정면으로 맞섰다", "hp": { "expr": "hp-30" } }, "goto": "climax" },
+              { "label": "🤫 숨어서 관찰한다 (정신력 -25, 단서 +1)", "set": { "act": "숨죽여 관찰했다", "sanity": { "expr": "sanity-25" }, "clues": { "expr": "clues+1" } }, "goto": "climax" },
+              { "label": "🏃 도망친다 (평판 -20)", "set": { "act": "뒤도 돌아보지 않고 도망쳤다", "reputation": { "expr": "reputation-20" } }, "goto": "climax" }
+            ]
+          },
+          "climax": {
+            "type": "generate",
+            "grounded": false,
+            "prompt": "지금까지: {{scene2}}\n{{name}}은(는) {{act}}. 현재 체력 {{hp}}, 정신력 {{sanity}}, 모은 단서 {{clues}}개.\n이 상태를 반영해 절정 장면을 4문장으로 써. 상태가 낮으면 위태롭게, 높으면 대담하게 묘사하라.",
+            "into": "scene3",
+            "next": "route"
+          },
+          "route": {
+            "type": "if",
+            "cond": { "expr": "hp<=40 || sanity<=40" },
+            "then": "badEnding",
+            "else": "goodCheck"
+          },
+          "goodCheck": {
+            "type": "if",
+            "cond": { "expr": "clues>=2 && reputation>=50" },
+            "then": "trueEnding",
+            "else": "neutralEnding"
+          },
+          "badEnding": {
+            "type": "generate",
+            "grounded": false,
+            "prompt": "지금까지: {{scene3}}\n{{name}}은(는) 체력 {{hp}}, 정신력 {{sanity}}로 한계에 다다랐다. 무너지는 파국적 결말을 3문장으로 인상적으로 써줘.",
+            "into": "fin",
+            "next": "restartAsk"
+          },
+          "neutralEnding": {
+            "type": "generate",
+            "grounded": false,
+            "prompt": "지금까지: {{scene3}}\n{{name}}은(는) 살아남았지만 진실의 일부만 손에 쥐었다(단서 {{clues}}개). 여운이 남는 결말을 3문장으로 써줘.",
+            "into": "fin",
+            "next": "restartAsk"
+          },
+          "trueEnding": {
+            "type": "generate",
+            "grounded": false,
+            "prompt": "지금까지: {{scene3}}\n{{name}}은(는) 충분한 단서({{clues}}개)와 평판({{reputation}})으로 저택의 진실을 밝혀냈다. 통쾌하고 완결성 있는 진엔딩을 4문장으로 써줘.",
+            "into": "fin",
+            "next": "restartAsk"
+          },
+          "restartAsk": {
+            "type": "choice",
+            "prompt": "다시 도전하시겠습니까?",
+            "options": [
+              { "label": "🔄 처음부터 다시", "goto": "askName" },
+              { "label": "🏁 여기서 끝낸다", "goto": "done" }
+            ]
+          },
+          "done": { "type": "end" }
+        }
+      }
+    }
+  }
+}

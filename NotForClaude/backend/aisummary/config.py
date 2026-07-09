@@ -21,6 +21,8 @@ MODELS_CACHE = DATA_DIR / "models"
 MEETINGS_DIR = DATA_DIR / "meetings"
 SESSIONS_DIR = DATA_DIR / "sessions"
 PLUGINS_DIR = DATA_DIR / "plugins"
+NOVELS_DIR = DATA_DIR / "novels"        # (legacy) core Novel Maker projects
+PLUGIN_DATA_DIR = DATA_DIR / "plugin-data"   # per-plugin local storage (host API)
 CONFIG_PATH = DATA_DIR / "config.json"
 
 
@@ -110,7 +112,8 @@ class Settings:
 
 
 def ensure_dirs() -> None:
-    for d in (DATA_DIR, DB_DIR, MODELS_CACHE, MEETINGS_DIR, SESSIONS_DIR, PLUGINS_DIR):
+    for d in (DATA_DIR, DB_DIR, MODELS_CACHE, MEETINGS_DIR, SESSIONS_DIR,
+              PLUGINS_DIR, NOVELS_DIR, PLUGIN_DATA_DIR):
         d.mkdir(parents=True, exist_ok=True)
 
 

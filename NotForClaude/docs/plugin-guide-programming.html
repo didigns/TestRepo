@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AISummary · 플러그인 프로그래밍 가이드 (AssemblyScript)</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c232d; --border:#2a323d;
+    --text:#e6edf3; --text2:#9fb0c0; --muted:#6e7d8c; --accent:#5b8cff; --accent2:#7c5bff;
+    --ok:#3fb950; --warn:#d29922; --danger:#f85149;
+    --code:#0b0e13; --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;} html{scroll-behavior:smooth;}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo",sans-serif;line-height:1.7;font-size:15px;}
+  .wrap{display:flex;max-width:1180px;margin:0 auto;}
+  nav.toc{position:sticky;top:0;align-self:flex-start;height:100vh;width:256px;flex-shrink:0;overflow-y:auto;
+    padding:26px 16px 40px 22px;border-right:.5px solid var(--border);}
+  nav.toc .brand{font-weight:800;font-size:15px;} nav.toc .brand .dot{color:var(--accent);}
+  nav.toc .sub{font-size:11.5px;color:var(--muted);margin-bottom:20px;}
+  nav.toc a{display:block;color:var(--text2);text-decoration:none;font-size:13px;padding:4px 10px;border-radius:6px;margin:1px 0;border-left:2px solid transparent;}
+  nav.toc a:hover{color:var(--text);background:var(--panel);}
+  nav.toc a.active{color:var(--accent);border-left-color:var(--accent);background:var(--panel);}
+  nav.toc .grp{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:16px 0 4px 10px;}
+  main{flex:1;min-width:0;padding:34px 44px 120px;}
+  h1{font-size:29px;font-weight:800;margin:0 0 6px;letter-spacing:-.01em;}
+  .lede{color:var(--text2);font-size:16px;margin:0 0 6px;}
+  .badge-lang{display:inline-block;font-size:11px;font-weight:700;color:#d2a8ff;border:.5px solid #8957e555;border-radius:20px;padding:2px 10px;margin-left:6px;vertical-align:middle;}
+  h2{font-size:22px;font-weight:750;margin:44px 0 12px;padding-top:14px;border-top:.5px solid var(--border);}
+  h2:first-of-type{border-top:none;}
+  h3{font-size:16px;font-weight:700;margin:24px 0 8px;}
+  h4{font-size:13.5px;font-weight:700;margin:16px 0 6px;color:var(--text2);}
+  p{margin:10px 0;} a{color:var(--accent);}
+  code{font-family:var(--mono);font-size:12.8px;background:var(--panel2);border:.5px solid var(--border);border-radius:5px;padding:1px 5px;color:#c9d6e3;}
+  pre{background:var(--code);border:.5px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;position:relative;margin:14px 0;}
+  pre code{background:none;border:none;padding:0;font-size:12.7px;line-height:1.6;color:#cdd9e5;white-space:pre;}
+  pre .cp{position:absolute;top:8px;right:8px;font-size:10.5px;color:var(--muted);background:var(--panel);border:.5px solid var(--border);border-radius:5px;padding:2px 7px;cursor:pointer;opacity:0;transition:.15s;}
+  pre:hover .cp{opacity:1;} pre .cp:hover{color:var(--text);}
+  .k{color:#ff7b9c;} .s{color:#9ece6a;} .n{color:#e0af68;} .c{color:#5c6a79;font-style:italic;} .p{color:#7dcfff;} .t{color:#d2a8ff;} .f{color:#7aa2ff;}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13px;}
+  th,td{border:.5px solid var(--border);padding:7px 11px;text-align:left;vertical-align:top;}
+  th{background:var(--panel2);font-weight:650;color:var(--text2);} td code{font-size:12px;}
+  .callout{border:.5px solid var(--border);border-left:3px solid var(--accent);background:var(--panel);border-radius:8px;padding:12px 16px;margin:16px 0;font-size:13.5px;color:var(--text2);}
+  .callout.sec{border-left-color:var(--ok);} .callout.warn{border-left-color:var(--warn);} .callout b{color:var(--text);}
+  ul,ol{padding-left:22px;} li{margin:4px 0;}
+  .ba{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0 22px;align-items:start;}
+  .ba .before,.ba .after{min-width:0;}
+  .ba .lab{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-bottom:5px;}
+  .ba .before .lab{color:var(--danger);} .ba .after .lab{color:var(--ok);}
+  .ba pre{margin:0;}
+  @media(max-width:900px){.ba{grid-template-columns:1fr;}}
+  /* demo */
+  .demo{border:.5px solid var(--border);border-radius:12px;background:var(--panel);padding:16px;margin:8px 0 18px;}
+  .demo .dlabel{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin:-2px 0 12px;display:flex;gap:6px;align-items:center;}
+  .demo .dlabel::before{content:"▶";color:var(--accent);font-size:9px;} .demo .dlabel b{color:var(--accent);}
+  .d-play{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;} .d-play .col{flex:1;min-width:230px;}
+  .d-ta{width:100%;border:.5px solid var(--border);border-radius:7px;padding:8px 10px;background:var(--panel2);color:var(--text);font-size:12.8px;min-height:52px;font-family:inherit;}
+  .d-btn{font-size:12.5px;padding:8px 14px;border-radius:8px;border:.5px solid var(--border);background:var(--panel2);color:var(--text);cursor:default;}
+  .d-btn.primary{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .d-btn.mini.danger{font-size:11px;padding:4px 9px;color:var(--danger);}
+  .d-row{display:flex;gap:8px;flex-wrap:wrap;} .d-md{font-size:13px;border:.5px solid var(--border);border-radius:9px;padding:10px 13px;background:var(--panel2);color:var(--text);}
+  .d-side{width:230px;flex-shrink:0;border:.5px solid var(--border);border-radius:10px;background:var(--panel2);padding:11px;}
+  .d-note{border:.5px solid var(--border);border-radius:8px;background:var(--panel);padding:8px 10px;margin:6px 0;display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12.5px;}
+  .foot{margin-top:56px;padding-top:18px;border-top:.5px solid var(--border);color:var(--muted);font-size:12px;}
+  @media(max-width:820px){ nav.toc{display:none;} main{padding:24px 18px 80px;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" id="toc">
+  <div class="brand"><span class="dot">◆</span> AISummary</div>
+  <div class="sub">플러그인 프로그래밍 가이드</div>
+  <a href="#why">1. 왜 AssemblyScript</a>
+  <a href="#setup">2. 설치 · 구조</a>
+  <a href="#sdk">3. SDK 개요</a>
+  <div class="grp">레퍼런스</div>
+  <a href="#ui" class="lv2">UI 빌더</a>
+  <a href="#host" class="lv2">호스트 능력</a>
+  <a href="#life" class="lv2">라이프사이클</a>
+  <a href="#example">4. 전체 예시</a>
+  <a href="#build">5. 빌드 · 배포</a>
+  <a href="#test">6. 테스트</a>
+  <a href="#gotchas">7. 함정</a>
+  <a href="#checklist">8. 체크리스트</a>
+</nav>
+
+<main>
+  <h1>플러그인 프로그래밍 가이드 <span class="badge-lang">AssemblyScript</span></h1>
+  <p class="lede">T2(WASM) 플러그인을 <b>AISummary SDK</b>로 직관적으로 작성하는 방법. 문자열 조립·메모리 마샬링은 SDK가 감추고, 당신은 <code>Text()</code> · <code>Button()</code> · <code>render()</code>만 씁니다.</p>
+  <div class="callout">이 문서는 <b>코드를 짜는 사람</b>을 위한 것입니다. 아키텍처 개념은 <b>plugin-guide.html</b>, 에이전트용 계약은 <b>plugin-guide-agent.html</b>을 보세요.</div>
+
+  <!-- 1 -->
+  <h2 id="why">1. 왜 AssemblyScript인가</h2>
+  <p>WASM은 Rust·TinyGo·C 등 여러 언어로 만들 수 있지만, 이 앱에는 <b>AssemblyScript 하나를 추천</b>합니다.</p>
+  <ul>
+    <li><b>TypeScript 문법</b> — 앱 프론트가 이미 JS/TS라 학습 곡선이 거의 없습니다.</li>
+    <li><b>가벼운 툴체인</b> — <code>npm i assemblyscript</code> 한 줄. 별도 컴파일러 설치·크로스툴체인 불필요.</li>
+    <li><b>작은 바이너리</b> — 예제 플러그인이 30KB대.</li>
+    <li><b>검증된 경로</b> — 앱의 소설 메이커가 AssemblyScript로 작성되어 있습니다.</li>
+  </ul>
+
+  <!-- 2 -->
+  <h2 id="setup">2. 설치 &amp; 프로젝트 구조</h2>
+  <pre data-cp><code><span class="c"># 툴체인 + JSON 라이브러리</span>
+npm i assemblyscript assemblyscript-json</code></pre>
+  <pre data-cp><code>my-plugin/
+├─ plugin.json          <span class="c"># 매니페스트 (entry: "plugin.wasm")</span>
+├─ src/main.ts          <span class="c"># 당신의 플러그인 코드</span>
+├─ aisummary.ts         <span class="c"># SDK (이 파일을 그대로 넣으세요)</span>
+└─ plugin.wasm          <span class="c"># 빌드 산출물</span></code></pre>
+  <p><code>plugin.json</code>은 T2 매니페스트입니다. <code>entry</code>와 <code>code:wasm</code> 능력을 선언하세요.</p>
+  <pre data-cp><code>{
+  <span class="p">"manifestVersion"</span>: <span class="n">1</span>, <span class="p">"id"</span>: <span class="s">"ai-notes"</span>, <span class="p">"name"</span>: <span class="s">"AI 메모"</span>, <span class="p">"version"</span>: <span class="s">"1.0.0"</span>,
+  <span class="p">"entry"</span>: <span class="s">"plugin.wasm"</span>,
+  <span class="p">"permissions"</span>: { <span class="p">"folders"</span>: [], <span class="p">"network"</span>: <span class="k">false</span>,
+    <span class="p">"capabilities"</span>: [<span class="s">"code:wasm"</span>, <span class="s">"model:generate"</span>, <span class="s">"ui:render"</span>, <span class="s">"storage:local"</span>] },
+  <span class="p">"contributes"</span>: { <span class="p">"mode"</span>: { <span class="p">"label"</span>: <span class="s">"AI 메모"</span>, <span class="p">"icon"</span>: <span class="s">"💡"</span> } }
+}</code></pre>
+
+  <!-- 3 -->
+  <h2 id="sdk">3. SDK 개요</h2>
+  <p>SDK 없이 직접 짜면 UI가 문자열 조립이라 읽기 힘듭니다. SDK는 이걸 선언적 함수로 감쌉니다.</p>
+  <div class="ba">
+    <div class="before"><div class="lab">✗ SDK 없이 (raw)</div>
+      <pre><code>main += <span class="s">","</span> + node(<span class="s">"Row"</span>,
+  q(<span class="s">"c"</span>)+<span class="s">":["</span>+node(<span class="s">"Btn"</span>,
+    q(<span class="s">"label"</span>)+<span class="s">":"</span>+q(<span class="s">"저장"</span>)+
+    <span class="s">","</span>+q(<span class="s">"ev"</span>)+<span class="s">":"</span>+q(<span class="s">"add"</span>)+
+    <span class="s">","</span>+q(<span class="s">"variant"</span>)+<span class="s">":"</span>+q(<span class="s">"primary"</span>))
+  +<span class="s">"]"</span>);</code></pre></div>
+    <div class="after"><div class="lab">✓ SDK로</div>
+      <pre><code>ui.<span class="f">Row</span>([
+  ui.<span class="f">Button</span>(<span class="s">"저장"</span>, <span class="s">"add"</span>, <span class="s">"primary"</span>),
+])</code></pre></div>
+  </div>
+  <p>임포트는 이렇게 시작합니다. 마샬링 함수 두 개만 re-export 하면 나머지는 SDK가 처리합니다.</p>
+  <pre data-cp><code><span class="k">import</span> * <span class="k">as</span> ui <span class="k">from</span> <span class="s">"./aisummary"</span>;
+<span class="k">import</span> { <span class="t">Node</span> } <span class="k">from</span> <span class="s">"./aisummary"</span>;
+
+<span class="c">// WASM이 export 해야 하는 마샬링 함수 (한 줄씩 위임)</span>
+<span class="k">export function</span> <span class="f">alloc</span>(size: <span class="t">i32</span>): <span class="t">usize</span> { <span class="k">return</span> ui.<span class="f">alloc</span>(size); }
+<span class="k">export function</span> <span class="f">dealloc</span>(ptr: <span class="t">usize</span>, size: <span class="t">i32</span>): <span class="k">void</span> { ui.<span class="f">dealloc</span>(ptr, size); }</code></pre>
+
+  <h3 id="ui">UI 빌더</h3>
+  <p>모든 빌더는 <code>Node</code>를 반환하고, 컨테이너는 <code>Node[]</code>를 받습니다. 마지막에 <code>render*</code>로 표면에 그립니다.</p>
+  <table>
+    <tr><th>함수</th><th>설명</th></tr>
+    <tr><td><code>Text(text, muted?)</code></td><td>텍스트(<code>muted</code>=회색 보조)</td></tr>
+    <tr><td><code>Markdown(text)</code></td><td>마크다운 렌더</td></tr>
+    <tr><td><code>Input(value, ph, ev, num?)</code></td><td>한 줄 입력(<code>num</code>=숫자)</td></tr>
+    <tr><td><code>Textarea(value, ph, ev)</code></td><td>여러 줄 입력</td></tr>
+    <tr><td><code>Select(value, [opt(v,l)…], ev)</code></td><td>드롭다운. <code>opt(value,label)</code>로 항목</td></tr>
+    <tr><td><code>Checkbox(checked, label, ev)</code></td><td>체크박스</td></tr>
+    <tr><td><code>Button(label, ev, variant?)</code></td><td>버튼. variant: <code>primary</code>/<code>mini</code>/<code>mini danger</code>/<code>ai</code></td></tr>
+    <tr><td><code>Row([...])</code> · <code>Col([...])</code></td><td>가로/세로 배치</td></tr>
+    <tr><td><code>Card(cls, [...])</code></td><td>카드 컨테이너(클래스 지정)</td></tr>
+    <tr><td><code>Item(cls, ev, [...])</code></td><td>클릭 가능한 목록 항목</td></tr>
+    <tr><td><code>Divider()</code></td><td>구분선</td></tr>
+    <tr><td><code>renderMain([...])</code> · <code>renderSidebar([...])</code></td><td>메인/사이드바 표면에 그리기</td></tr>
+  </table>
+  <div class="callout warn">텍스트 입력(<code>Input</code>/<code>Textarea</code>)의 <code>ev</code>는 <b>포커스를 잃을 때(onchange)</b> 값을 돌려줍니다. 그래서 텍스트 이벤트 핸들러에서는 <b>다시 <code>render()</code>하지 마세요</b>(타이핑 중 리렌더 → 포커스 튐). 상태만 갱신하고, 구조가 바뀌는 버튼/셀렉트에서만 다시 렌더하세요.</div>
+
+  <h3 id="host">호스트 능력</h3>
+  <table>
+    <tr><th>함수</th><th>설명</th></tr>
+    <tr><td><code>toast(msg)</code> · <code>log(msg)</code></td><td>알림 / 디버그 로그</td></tr>
+    <tr><td><code>generate(reqId, prompt, persona)</code></td><td>로컬 LLM 호출. 결과는 <code>on_generate_done(reqId, …)</code>으로 도착</td></tr>
+    <tr><td><code>storage.saveStrings(key, string[])</code></td><td>문자열 배열 저장(가장 흔함)</td></tr>
+    <tr><td><code>storage.saveString(key, value)</code></td><td>문자열 하나 저장</td></tr>
+    <tr><td><code>storage.saveJson(key, valueJson)</code></td><td>직렬화된 JSON 값 저장(고급)</td></tr>
+    <tr><td><code>storage.remove(key)</code></td><td>키 삭제</td></tr>
+    <tr><td><code>exportPlugin(manifestJson)</code></td><td>완성 매니페스트를 새 플러그인으로 설치</td></tr>
+    <tr><td><code>preview(specJson)</code></td><td><code>{persona,stats,flow}</code>를 호스트 런타임이 플레이</td></tr>
+  </table>
+
+  <h3 id="life">라이프사이클</h3>
+  <p>플러그인은 세 함수를 <code>export</code>합니다. SDK가 파싱을 도와줍니다.</p>
+  <table>
+    <tr><th>export 함수</th><th>SDK 헬퍼</th></tr>
+    <tr><td><code>on_init(ptr,len)</code></td><td><code>ui.initStorage(ptr,len)</code> → 저장소 <code>JSON.Obj</code></td></tr>
+    <tr><td><code>on_event(hp,hl,pp,pl)</code></td><td><code>ui.event(...)</code> → <code>Ev{ cmd, arg(i), argInt(i), value }</code></td></tr>
+    <tr><td><code>on_generate_done(reqId,ptr,len)</code></td><td><code>ui.readStr(ptr,len)</code> → 결과 텍스트</td></tr>
+  </table>
+  <p>이벤트는 <code>"cmd:arg0:arg1"</code> 형태 문자열 + 값으로 옵니다. 예: 버튼 <code>ev:"del:3"</code> → <code>e.cmd=="del"</code>, <code>e.argInt(0)==3</code>.</p>
+
+  <!-- 4 -->
+  <h2 id="example">4. 전체 예시 — “AI 메모”</h2>
+  <p>메모를 저장(<code>storage</code>)하고, 목록을 사이드바에 보여주고, 버튼으로 AI 요약(<code>generate</code>)하는 완결형 플러그인입니다. <b>아래 코드는 실제로 컴파일·검증되었습니다.</b></p>
+  <pre data-cp><code><span class="k">import</span> { <span class="t">JSON</span> } <span class="k">from</span> <span class="s">"assemblyscript-json/assembly"</span>;
+<span class="k">import</span> * <span class="k">as</span> ui <span class="k">from</span> <span class="s">"./aisummary"</span>;
+<span class="k">import</span> { <span class="t">Node</span> } <span class="k">from</span> <span class="s">"./aisummary"</span>;
+
+<span class="c">// 마샬링 re-export</span>
+<span class="k">export function</span> <span class="f">alloc</span>(s: <span class="t">i32</span>): <span class="t">usize</span> { <span class="k">return</span> ui.<span class="f">alloc</span>(s); }
+<span class="k">export function</span> <span class="f">dealloc</span>(p: <span class="t">usize</span>, s: <span class="t">i32</span>): <span class="k">void</span> { ui.<span class="f">dealloc</span>(p, s); }
+
+<span class="c">// 상태</span>
+<span class="k">let</span> notes: <span class="t">string</span>[] = [];
+<span class="k">let</span> draft: <span class="t">string</span> = <span class="s">""</span>;
+<span class="k">let</span> output: <span class="t">string</span> = <span class="s">""</span>;
+
+<span class="c">// 렌더 — 선언적으로</span>
+<span class="k">function</span> <span class="f">render</span>(): <span class="k">void</span> {
+  <span class="k">const</span> main: <span class="t">Node</span>[] = [
+    ui.<span class="f">Text</span>(<span class="s">"💡 AI 메모"</span>),
+    ui.<span class="f">Textarea</span>(draft, <span class="s">"메모를 입력…"</span>, <span class="s">"draft"</span>),
+    ui.<span class="f">Row</span>([
+      ui.<span class="f">Button</span>(<span class="s">"＋ 저장"</span>, <span class="s">"add"</span>, <span class="s">"primary"</span>),
+      ui.<span class="f">Button</span>(<span class="s">"✨ AI로 요약"</span>, <span class="s">"summarize"</span>),
+    ]),
+  ];
+  <span class="k">if</span> (output.length &gt; <span class="n">0</span>) main.<span class="f">push</span>(ui.<span class="f">Markdown</span>(output));
+  ui.<span class="f">renderMain</span>(main);
+
+  <span class="k">const</span> side: <span class="t">Node</span>[] = [ ui.<span class="f">Text</span>(<span class="s">"메모 "</span> + notes.length.<span class="f">toString</span>() + <span class="s">"개"</span>, <span class="k">true</span>) ];
+  <span class="k">for</span> (<span class="k">let</span> i = <span class="n">0</span>; i &lt; notes.length; i++) {
+    <span class="k">const</span> preview = notes[i].length &gt; <span class="n">40</span> ? notes[i].<span class="f">substring</span>(<span class="n">0</span>, <span class="n">40</span>) : notes[i];
+    side.<span class="f">push</span>(ui.<span class="f">Card</span>(<span class="s">"note-item"</span>, [
+      ui.<span class="f">Text</span>(preview),
+      ui.<span class="f">Button</span>(<span class="s">"삭제"</span>, <span class="s">"del:"</span> + i.<span class="f">toString</span>(), <span class="s">"mini danger"</span>),
+    ]));
+  }
+  ui.<span class="f">renderSidebar</span>(side);
+}
+
+<span class="c">// 라이프사이클</span>
+<span class="k">export function</span> <span class="f">on_init</span>(ptr: <span class="t">usize</span>, len: <span class="t">i32</span>): <span class="k">void</span> {
+  <span class="k">const</span> store = ui.<span class="f">initStorage</span>(ptr, len);
+  notes = [];
+  <span class="k">const</span> arr = store.<span class="f">getArr</span>(<span class="s">"notes"</span>);
+  <span class="k">if</span> (arr != <span class="k">null</span>) { <span class="k">const</span> a = arr.<span class="f">valueOf</span>();
+    <span class="k">for</span> (<span class="k">let</span> i = <span class="n">0</span>; i &lt; a.length; i++) notes.<span class="f">push</span>((&lt;<span class="t">JSON.Str</span>&gt;a[i]).<span class="f">valueOf</span>()); }
+  <span class="f">render</span>();
+}
+
+<span class="k">export function</span> <span class="f">on_event</span>(hp: <span class="t">usize</span>, hl: <span class="t">i32</span>, pp: <span class="t">usize</span>, pl: <span class="t">i32</span>): <span class="k">void</span> {
+  <span class="k">const</span> e = ui.<span class="f">event</span>(hp, hl, pp, pl);
+  <span class="k">if</span> (e.cmd == <span class="s">"draft"</span>) { draft = e.value; <span class="k">return</span>; }        <span class="c">// 텍스트: 리렌더 X</span>
+  <span class="k">if</span> (e.cmd == <span class="s">"add"</span>) {
+    <span class="k">if</span> (draft.length == <span class="n">0</span>) { ui.<span class="f">toast</span>(<span class="s">"내용을 입력하세요"</span>); <span class="k">return</span>; }
+    notes.<span class="f">push</span>(draft); draft = <span class="s">""</span>;
+    ui.storage.<span class="f">saveStrings</span>(<span class="s">"notes"</span>, notes); ui.<span class="f">toast</span>(<span class="s">"저장됨"</span>); <span class="f">render</span>(); <span class="k">return</span>;
+  }
+  <span class="k">if</span> (e.cmd == <span class="s">"del"</span>) {
+    <span class="k">const</span> idx = e.<span class="f">argInt</span>(<span class="n">0</span>); <span class="k">const</span> n: <span class="t">string</span>[] = [];
+    <span class="k">for</span> (<span class="k">let</span> k = <span class="n">0</span>; k &lt; notes.length; k++) <span class="k">if</span> (k != idx) n.<span class="f">push</span>(notes[k]);
+    notes = n; ui.storage.<span class="f">saveStrings</span>(<span class="s">"notes"</span>, notes); <span class="f">render</span>(); <span class="k">return</span>;
+  }
+  <span class="k">if</span> (e.cmd == <span class="s">"summarize"</span>) {
+    <span class="k">if</span> (notes.length == <span class="n">0</span>) { ui.<span class="f">toast</span>(<span class="s">"메모가 없습니다"</span>); <span class="k">return</span>; }
+    output = <span class="s">"…"</span>; <span class="f">render</span>();
+    ui.<span class="f">generate</span>(<span class="n">1</span>, <span class="s">"다음 메모들을 3줄로 요약해줘:\n- "</span> + notes.<span class="f">join</span>(<span class="s">"\n- "</span>),
+                 <span class="s">"너는 간결한 메모 정리 도우미야."</span>);
+    <span class="k">return</span>;
+  }
+}
+
+<span class="k">export function</span> <span class="f">on_generate_done</span>(reqId: <span class="t">i32</span>, ptr: <span class="t">usize</span>, len: <span class="t">i32</span>): <span class="k">void</span> {
+  output = ui.<span class="f">readStr</span>(ptr, len); <span class="f">render</span>();
+}</code></pre>
+
+  <div class="demo">
+    <div class="dlabel">위 코드가 그리는 화면 (검증된 렌더 결과)</div>
+    <div class="d-play">
+      <div class="col">
+        <div style="font-size:14px;font-weight:600;margin-bottom:8px">💡 AI 메모</div>
+        <textarea class="d-ta" readonly>내일 회의 안건 정리하기</textarea>
+        <div style="height:8px"></div>
+        <div class="d-row"><button class="d-btn primary">＋ 저장</button><button class="d-btn">✨ AI로 요약</button></div>
+        <div style="height:12px"></div>
+        <div class="d-md">메모 3개 요약: 회의 준비·기획 검토·팀 공유가 핵심 할 일이다.</div>
+      </div>
+      <div class="d-side">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px">메모 3개</div>
+        <div class="d-note"><span>내일 회의 안건 정리하기</span><button class="d-btn mini danger">삭제</button></div>
+        <div class="d-note"><span>기획서 초안 검토</span><button class="d-btn mini danger">삭제</button></div>
+        <div class="d-note"><span>팀에 진행상황 공유</span><button class="d-btn mini danger">삭제</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5 -->
+  <h2 id="build">5. 빌드 &amp; 배포</h2>
+  <pre data-cp><code>asc src/main.ts -o plugin.wasm --optimize --exportRuntime --lib ./node_modules</code></pre>
+  <p>산출된 <code>plugin.wasm</code> + <code>plugin.json</code>을 폴더째 넣으면 끝입니다.</p>
+  <ul>
+    <li><b>사용자 설치</b>: <code>~/.aisummary/plugins/&lt;id&gt;/</code>에 폴더 복사 → 설정에서 켜기</li>
+    <li><b>배포</b>: 완성된 <code>plugin.wasm</code>을 그대로 공유(앱은 소스를 받지 않고 바이너리만 로드). npm 패키지가 <code>dist/</code>를 올리는 것과 같은 모델</li>
+  </ul>
+  <div class="callout warn"><b>assemblyscript-json 패치 필요.</b> 이 라이브러리의 <code>Str.stringify()</code>는 제어문자(줄바꿈) 이스케이프에 버그가 있어, 줄바꿈이 든 텍스트를 저장하면 깨집니다. 빌드 전 <code>node_modules/assemblyscript-json/assembly/JSON.ts</code>의 <code>Str.stringify()</code>가 <code>\n \r \t</code>를 올바로 이스케이프하도록 한 번 고치세요(자세한 스니펫은 <code>BUILD.md</code>). SDK 내부의 <code>esc()</code>는 이미 안전합니다.</div>
+
+  <!-- 6 -->
+  <h2 id="test">6. 테스트 (Node 하네스)</h2>
+  <p>앱 없이도 Node로 wasm을 직접 구동해 로직을 검증할 수 있습니다. 호스트 import를 목(mock)으로 채우고 export를 호출하면 됩니다.</p>
+  <pre data-cp><code><span class="k">import</span> fs <span class="k">from</span> <span class="s">"fs"</span>;
+<span class="k">const</span> bytes = fs.<span class="f">readFileSync</span>(<span class="s">"plugin.wasm"</span>);
+<span class="k">let</span> ex, mem; <span class="k">const</span> dec = <span class="k">new</span> <span class="t">TextDecoder</span>(), enc = <span class="k">new</span> <span class="t">TextEncoder</span>();
+<span class="k">const</span> rd = (p,l) =&gt; dec.<span class="f">decode</span>(<span class="k">new</span> <span class="t">Uint8Array</span>(mem.buffer, p, l));
+<span class="k">const</span> env = {
+  <span class="f">abort</span>: () =&gt; { <span class="k">throw</span> <span class="k">new</span> <span class="t">Error</span>(<span class="s">"abort"</span>); },
+  <span class="f">host_ui_render</span>: (p,l) =&gt; console.<span class="f">log</span>(<span class="s">"UI:"</span>, rd(p,l)),
+  <span class="f">host_toast</span>: (p,l) =&gt; console.<span class="f">log</span>(<span class="s">"toast:"</span>, rd(p,l)),
+  <span class="f">host_storage_save</span>: (p,l) =&gt; console.<span class="f">log</span>(<span class="s">"save:"</span>, rd(p,l)),
+  <span class="f">host_generate</span>: (r,p,l) =&gt; console.<span class="f">log</span>(<span class="s">"gen:"</span>, rd(p,l)),
+  host_storage_delete(){}, host_export(){}, host_preview(){}, host_log(){},
+};
+<span class="k">const</span> { instance } = <span class="k">await</span> <span class="t">WebAssembly</span>.<span class="f">instantiate</span>(bytes, { env });
+ex = instance.exports; mem = ex.memory;
+<span class="k">const</span> w = s =&gt; { <span class="k">const</span> b = enc.<span class="f">encode</span>(s); <span class="k">const</span> p = ex.<span class="f">alloc</span>(b.length);
+  <span class="k">new</span> <span class="t">Uint8Array</span>(mem.buffer, p, b.length).<span class="f">set</span>(b); <span class="k">return</span> [p, b.length]; };
+<span class="c">// 초기화 후 이벤트 흘려보내기</span>
+{ <span class="k">const</span> [p,l] = w(<span class="t">JSON</span>.<span class="f">stringify</span>({ storage: { notes: [<span class="s">"첫 메모"</span>] } })); ex.<span class="f">on_init</span>(p,l); ex.<span class="f">dealloc</span>(p,l); }</code></pre>
+  <div class="callout sec"><b>import는 <code>env</code> 하나로 충분.</b> SDK가 <code>@external("env", …)</code>로 모든 호스트 함수를 <code>env</code> 모듈에 고정하므로, 목 객체 하나만 바인딩하면 됩니다.</div>
+
+  <!-- 7 -->
+  <h2 id="gotchas">7. 함정 (자주 걸리는 것)</h2>
+  <ul>
+    <li><b>텍스트 입력 리렌더 금지</b> — <code>Input</code>/<code>Textarea</code> 핸들러에서 <code>render()</code>하면 포커스가 튑니다. 상태만 갱신하세요.</li>
+    <li><b>이벤트 값의 출처</b> — 인덱스 같은 인자는 핸들러 문자열(<code>"del:3"</code>)에, 입력 값은 <code>e.value</code>에 옵니다. 둘을 혼동하지 마세요.</li>
+    <li><b>JSON 라이브러리 패치</b> — §5 경고 참고. SDK의 <code>esc()</code>·<code>storage.*</code>는 안전하지만, <code>JSON.Obj.stringify()</code>를 직접 쓰면 패치가 필요합니다.</li>
+    <li><b>결정성</b> — WASM에는 시계·난수가 기본 없습니다. 필요하면 상태로 관리하거나 카운터를 쓰세요.</li>
+    <li><b>메모리</b> — 호스트에 넘기는 문자열은 SDK가 인코딩합니다. 직접 포인터를 다룰 때만 <code>alloc/dealloc</code>을 신경 쓰세요.</li>
+    <li><b>abort</b> — 잘못된 캐스트/배열 범위 초과는 wasm을 abort시킵니다. 호스트는 이를 try/catch로 잡아 앱이 죽지 않게 하지만, 로직에서 방지하는 게 최선입니다.</li>
+  </ul>
+
+  <!-- 8 -->
+  <h2 id="checklist">8. 체크리스트</h2>
+  <ul>
+    <li>✅ <code>alloc</code>/<code>dealloc</code>을 export 했는가 (SDK 위임)</li>
+    <li>✅ <code>on_init</code>/<code>on_event</code>/<code>on_generate_done</code> export</li>
+    <li>✅ <code>plugin.json</code>에 <code>entry</code> + <code>code:wasm</code>, <code>network:false</code></li>
+    <li>✅ 텍스트 입력 핸들러는 상태만 갱신(리렌더 X)</li>
+    <li>✅ 저장은 <code>storage.*</code>로 격리 폴더에만</li>
+    <li>✅ assemblyscript-json 패치 적용 후 빌드</li>
+    <li>✅ Node 하네스로 라이프사이클 검증</li>
+  </ul>
+
+  <div class="foot">AISummary 플러그인 SDK (AssemblyScript) · SDK 파일: <code>plugins/sdk/assembly/aisummary.ts</code> · 예제: <code>plugins/sdk/examples/ai-notes.ts</code> · 아키텍처: docs/PLUGIN_ARCHITECTURE.md</div>
+</main>
+</div>
+<script>
+const links=[...document.querySelectorAll('nav.toc a')];
+const map=new Map(links.map(a=>[a.getAttribute('href').slice(1),a]));
+const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){links.forEach(l=>l.classList.remove('active'));const a=map.get(e.target.id);if(a)a.classList.add('active');}});},{rootMargin:'-10% 0px -80% 0px'});
+document.querySelectorAll('main [id]').forEach(el=>obs.observe(el));
+document.querySelectorAll('pre[data-cp]').forEach(pre=>{const b=document.createElement('button');b.className='cp';b.textContent='복사';
+  b.onclick=()=>{navigator.clipboard.writeText(pre.querySelector('code').innerText).then(()=>{b.textContent='복사됨';setTimeout(()=>b.textContent='복사',1200);});};pre.appendChild(b);});
+</script>
+</body>
+</html>

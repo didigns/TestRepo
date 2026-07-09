@@ -322,6 +322,85 @@
   .hstat .n{font-size:18px;font-weight:700;color:var(--text);}
   .hstat .l{font-size:10px;color:var(--text2);margin-top:2px;}
   .nav{flex-wrap:wrap;}
+  /* plugin declarative UI (rendered from a component tree; no raw HTML/JS) */
+  .plugin-badge{padding:8px 22px 0;font-size:10px;color:var(--coral);font-weight:600;}
+  .pl-box{max-width:760px;margin:0 auto;}
+  .pl-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0;}
+  .pl-col{display:flex;flex-direction:column;gap:6px;margin:6px 0;}
+  .pl-text{font-size:13px;color:var(--text);margin:8px 0;}
+  .pl-text.muted{color:var(--text2);font-size:12px;}
+  .pl-input,.pl-select,.pl-textarea{width:100%;border:.5px solid var(--border);border-radius:8px;padding:9px 11px;background:var(--panel2);color:var(--text);font-size:13px;margin:5px 0;outline:none;}
+  .pl-textarea{min-height:70px;resize:vertical;}
+  .pl-btn{font-size:12.5px;padding:9px 15px;border-radius:8px;border:.5px solid var(--border);background:var(--panel);color:var(--text);cursor:pointer;margin:6px 0;}
+  .pl-btn.primary{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .pl-btn:disabled{opacity:.5;cursor:default;}
+  .pl-md{font-size:13.5px;line-height:1.7;} .pl-md>*:first-child{margin-top:0;}
+  .pl-divider{border:0;border-top:.5px solid var(--border);margin:12px 0;}
+  .pl-list{margin:6px 0;padding-left:18px;font-size:13px;line-height:1.6;}
+  .pl-table{border-collapse:collapse;font-size:12.5px;margin:6px 0;width:100%;}
+  .pl-table td,.pl-table th{border:.5px solid var(--border);padding:4px 9px;text-align:left;} .pl-table th{background:var(--panel2);}
+  .pl-progress{height:8px;border-radius:5px;background:var(--panel2);overflow:hidden;margin:8px 0;}
+  .pl-progress>i{display:block;height:100%;background:var(--accent);border-radius:5px;}
+  /* flow-DSL interactive surface */
+  .flow-choices{display:flex;flex-direction:column;gap:6px;margin:14px 0;}
+  .flow-choices .pl-btn{text-align:left;margin:0;}
+  .flow-chosen{font-size:12px;color:var(--accent);margin-top:4px;}
+  .flow-input{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:14px 0;}
+  #pluginView .pl-md{margin:10px 0;padding:12px 14px;border:.5px solid var(--border);border-radius:10px;background:var(--panel);}
+  /* character status window (상태창) — rendered in the plugin sidebar surface */
+  .status-win{border:.5px solid var(--border);border-radius:10px;background:var(--panel);padding:12px;margin:6px;}
+  .status-title{font-size:12.5px;font-weight:700;color:var(--text);margin-bottom:9px;letter-spacing:.02em;display:flex;align-items:center;gap:5px;}
+  .status-title::before{content:"🎭";}
+  .status-row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12px;margin:5px 0 2px;}
+  .status-row .sl{color:var(--text2);flex-shrink:0;}
+  .status-row .sv{color:var(--text);font-weight:600;text-align:right;word-break:break-word;}
+  .status-bar{height:6px;border-radius:4px;background:var(--panel2);overflow:hidden;margin:2px 0 8px;}
+  .status-bar>i{display:block;height:100%;background:var(--accent);border-radius:4px;transition:width .3s ease;}
+  /* ===== Interactive Novel Maker ===== */
+  #novel-list .nv-item{padding:9px 10px;border:.5px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;background:var(--panel);}
+  #novel-list .nv-item.active{border-color:var(--accent);background:var(--panel2);}
+  #novel-list .nv-item .t{font-size:12.5px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  #novel-list .nv-item .m{font-size:10.5px;color:var(--muted);margin-top:2px;}
+  .nv-toolbar{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:.5px solid var(--border);flex-wrap:wrap;}
+  .nv-titleinput{font-size:15px;font-weight:700;border:none;background:transparent;color:var(--text);outline:none;min-width:160px;flex:1;}
+  .nv-tabs{display:flex;gap:4px;}
+  .nv-tab{font-size:12px;padding:6px 11px;border:.5px solid var(--border);border-radius:7px;background:var(--panel);color:var(--text2);cursor:pointer;}
+  .nv-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .nv-actions{display:flex;gap:6px;}
+  .nv-panel{flex:1;min-height:0;overflow-y:auto;padding:16px 18px;max-width:860px;width:100%;margin:0 auto;}
+  .nv-scene{border:.5px solid var(--border);border-radius:11px;background:var(--panel);margin-bottom:12px;overflow:hidden;}
+  .nv-scene.start{border-color:var(--accent);}
+  .nv-scene-h{display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--panel2);border-bottom:.5px solid var(--border);}
+  .nv-scene-h .id{font-size:11px;font-weight:700;color:var(--accent);font-family:monospace;}
+  .nv-scene-h .startbadge{font-size:9.5px;background:var(--accent);color:#fff;border-radius:4px;padding:1px 6px;}
+  .nv-scene-h .sp{flex:1;}
+  .nv-scene-b{padding:11px 12px;}
+  .nv-lbl{font-size:11px;color:var(--text2);margin:8px 0 3px;font-weight:600;}
+  .nv-in,.nv-sel,.nv-ta{width:100%;border:.5px solid var(--border);border-radius:7px;padding:7px 9px;background:var(--panel2);color:var(--text);font-size:12.5px;outline:none;box-sizing:border-box;}
+  .nv-ta{min-height:60px;resize:vertical;font-family:inherit;line-height:1.5;}
+  .nv-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .nv-row>*{margin:0;}
+  .nv-opt{border:.5px dashed var(--border);border-radius:8px;padding:9px;margin:7px 0;background:var(--panel2);}
+  .nv-eff{display:flex;gap:6px;align-items:center;margin:4px 0;font-size:11.5px;}
+  .nv-eff .nv-sel,.nv-eff .nv-in{width:auto;flex:1;min-width:60px;}
+  .nv-mini{font-size:11px;padding:4px 9px;border:.5px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text2);cursor:pointer;}
+  .nv-mini.danger{color:#dc2626;}
+  .nv-mini.ai{color:var(--accent);border-color:var(--accent);}
+  .nv-stat{display:flex;gap:8px;align-items:center;border:.5px solid var(--border);border-radius:8px;padding:9px;margin-bottom:7px;background:var(--panel);flex-wrap:wrap;}
+  .nv-stat .nv-in{width:auto;flex:1;min-width:70px;}
+  .nv-hint{font-size:11px;color:var(--muted);margin:6px 0 12px;line-height:1.5;}
+  .nv-preview{position:absolute;inset:0;background:var(--bg);z-index:40;display:flex;flex-direction:column;}
+  .nv-preview-h{display:flex;justify-content:space-between;align-items:center;padding:11px 16px;border-bottom:.5px solid var(--border);font-size:13px;font-weight:600;}
+  .nv-preview-body{flex:1;min-height:0;display:flex;}
+  #nv-pv-flow{padding:18px 20px;}
+  .nv-pv-status{width:230px;border-left:.5px solid var(--border);padding:6px;overflow-y:auto;background:var(--panel2);}
+  #view-novel{position:relative;}
+  .pl-btn.ai{color:var(--accent);border-color:var(--accent);}
+  /* plugin preview overlay (host_preview) */
+  .pv-overlay{position:fixed;inset:0;background:var(--bg);z-index:120;display:flex;flex-direction:column;}
+  .pv-h{display:flex;justify-content:space-between;align-items:center;padding:11px 16px;border-bottom:.5px solid var(--border);font-size:13px;font-weight:600;}
+  .pv-body{flex:1;min-height:0;display:flex;}
+  #pv-flow{padding:18px 20px;}
 </style>
 </head>
 <body>
@@ -373,6 +452,8 @@
       <button class="newbtn" onclick="newMeeting()">＋ 새 회의</button>
       <div id="mtree"><div style="font-size:10px;color:var(--muted);">불러오는 중…</div></div>
     </div>
+    <!-- plugin sidebar surface (rendered from a plugin's sidebar component tree) -->
+    <div id="plugin-sidebar" class="mlist hidden" style="overflow-y:auto;"></div>
     <div class="kb-foot">
       <div class="line" id="kbstat">인덱싱 정보 불러오는 중…</div>
       <div class="line" id="kbstatus"></div>
@@ -446,8 +527,12 @@
     </div>
     <!-- view: plugin (dynamic modes contributed by plugins) -->
     <div id="view-plugin" class="col hidden" style="flex:1;min-height:0;">
+      <div id="pluginBadge" class="plugin-badge hidden"></div>
+      <!-- custom declarative UI surface (rendered from the plugin's component tree) -->
+      <div class="thread hidden" id="pluginView"></div>
+      <!-- default chat-like UI (fallback when the plugin declares no view) -->
       <div class="thread" id="pthread"><div class="empty">플러그인</div></div>
-      <div class="composer">
+      <div class="composer" id="pcomposer">
         <div class="cbox">
           <input id="pq" placeholder="질문…" onkeydown="if(event.key==='Enter')pluginAsk()" />
           <span class="modelchip" id="pchip">플러그인</span>
@@ -455,6 +540,7 @@
         </div>
       </div>
     </div>
+
   </div>
 
   <!-- RIGHT: source preview -->
@@ -466,6 +552,18 @@
     <div class="src-body" id="srcbody"></div>
   </div>
 
+</div>
+
+<!-- plugin preview overlay (a plugin plays its flow here via host_preview) -->
+<div id="pv-overlay" class="pv-overlay hidden">
+  <div class="pv-h">
+    <span>▶ 미리보기 <span style="color:var(--muted);font-size:11px;">— 실제 플레이 (로컬 생성)</span></span>
+    <button class="icobtn" onclick="hidePluginPreview()">✕</button>
+  </div>
+  <div class="pv-body">
+    <div id="pv-flow" class="thread" style="flex:1;overflow:auto;"></div>
+    <div id="pv-status" class="nv-pv-status"></div>
+  </div>
 </div>
 
 <!-- settings modal -->
@@ -1305,7 +1403,9 @@ function switchView(v){
   el('view-chat').classList.toggle('hidden', v!=='chat');
   el('view-meeting').classList.toggle('hidden', v!=='meeting');
   if(el('view-plugin')) el('view-plugin').classList.add('hidden');
-  el('kb-docs').classList.toggle('hidden', v==='meeting');   // docs sidebar hidden only for meeting
+  if(el('plugin-sidebar')) el('plugin-sidebar').classList.add('hidden');
+  if(el('pluginBadge')) el('pluginBadge').classList.add('hidden');
+  el('kb-docs').classList.toggle('hidden', v==='meeting');   // docs sidebar hidden for meeting
   el('meeting-list').classList.toggle('hidden', v!=='meeting');
   if(v==='home'){ renderHome(); closeSource(); }
   if(v==='meeting'){ closeSource(); loadMeetings(); initMeetingSettings(); }
@@ -1685,14 +1785,377 @@ function openPluginMode(id){
   document.querySelectorAll('.navbtn').forEach(b=>b.classList.toggle('active', b.dataset.view==='plugin:'+id));
   if(el('view-home')) el('view-home').classList.add('hidden');
   el('view-chat').classList.add('hidden'); el('view-meeting').classList.add('hidden');
-  el('view-plugin').classList.remove('hidden');
-  el('kb-docs').classList.remove('hidden'); el('meeting-list').classList.add('hidden'); closeSource();
+  el('view-plugin').classList.remove('hidden'); closeSource();
   const mode=p.contributes.mode;
-  el('pq').placeholder=mode.placeholder||'질문…';
-  el('pchip').textContent=mode.label||p.name;
-  el('pthread').innerHTML=`<div class="empty">${esc((mode.icon?mode.icon+' ':'')+(mode.label||p.name))}<br>${esc(p.description||'')}</div>`;
-  el('pq').focus();
+  // anti-spoof badge — always shows this surface belongs to a plugin
+  const badge=el('pluginBadge'); if(badge){ badge.classList.remove('hidden'); badge.textContent='🧩 플러그인 · '+p.name; }
+  // ---- T2 code (WASM) plugin: hand the surfaces to the sandboxed module ----
+  if(p.entry){
+    el('pthread').classList.add('hidden'); el('pcomposer').classList.add('hidden');
+    el('pluginView').classList.remove('hidden');
+    el('kb-docs').classList.add('hidden'); el('meeting-list').classList.add('hidden');
+    const psb=el('plugin-sidebar'); if(psb){ psb.classList.remove('hidden'); psb.innerHTML=''; }
+    launchWasmPlugin(p);
+    return;
+  }
+  // ---- main surface: flow-DSL > custom view > fallback chat UI ----
+  if(mode.flow){
+    el('pthread').classList.add('hidden'); el('pcomposer').classList.add('hidden');
+    el('pluginView').classList.remove('hidden');
+    const ss=novelStatusSeed(mode);
+    runPluginFlow(id, mode.flow, ss.status, ss.seed);
+  }else if(mode.view){
+    el('pthread').classList.add('hidden'); el('pcomposer').classList.add('hidden');
+    el('pluginView').classList.remove('hidden');
+    pluginRender(el('pluginView'), mode.view, {pluginId:id, state:{}, out:{}});
+  }else{
+    el('pluginView').classList.add('hidden');
+    el('pthread').classList.remove('hidden'); el('pcomposer').classList.remove('hidden');
+    el('pq').placeholder=mode.placeholder||'질문…';
+    el('pchip').textContent=mode.label||p.name;
+    el('pthread').innerHTML=`<div class="empty">${esc((mode.icon?mode.icon+' ':'')+(mode.label||p.name))}<br>${esc(p.description||'')}</div>`;
+    el('pq').focus();
+  }
+  // ---- sidebar surface: status window (flow) > plugin's own panel > default docs sidebar ----
+  const psb=el('plugin-sidebar');
+  const hasStatus=mode.flow && (mode.status || (mode.stats||[]).some(s=>s&&s.show!==false&&s.key));
+  if(hasStatus && psb){
+    // status window is rendered by runPluginFlow → renderStatus into #plugin-sidebar
+    el('kb-docs').classList.add('hidden'); el('meeting-list').classList.add('hidden'); psb.classList.remove('hidden');
+  }else if(mode.sidebar && psb){
+    el('kb-docs').classList.add('hidden'); el('meeting-list').classList.add('hidden'); psb.classList.remove('hidden');
+    pluginRender(psb, mode.sidebar, {pluginId:id, state:{}, out:{}});
+  }else{
+    if(psb) psb.classList.add('hidden');
+    el('kb-docs').classList.remove('hidden'); el('meeting-list').classList.add('hidden');
+  }
 }
+
+// ---- declarative component renderer (host renders OUR components only) ----
+function pluginTmpl(s, state){ return (s||'').replace(/\{\{(\w+)\}\}/g,(m,k)=>state[k]!=null?state[k]:''); }
+function pluginRender(container, tree, ctx){
+  container.innerHTML='';
+  const box=document.createElement('div'); box.className='pl-box';
+  (Array.isArray(tree)?tree:[tree]).forEach(n=>box.appendChild(pluginNode(n,ctx)));
+  container.appendChild(box);
+}
+function pluginNode(node, ctx){
+  const t=(node&&node.type)||'', p=(node&&node.props)||{}; let e;
+  const kids=(node&&node.children)||[];
+  switch(t){
+    case 'Row': e=document.createElement('div'); e.className='pl-row'; kids.forEach(c=>e.appendChild(pluginNode(c,ctx))); break;
+    case 'Col': e=document.createElement('div'); e.className='pl-col'; kids.forEach(c=>e.appendChild(pluginNode(c,ctx))); break;
+    case 'Text': e=document.createElement('div'); e.className='pl-text'+(p.muted?' muted':''); e.textContent=p.text||''; break;
+    case 'Markdown': e=document.createElement('div'); e.className='pl-md ansmd';
+      e.innerHTML=(window.marked&&marked.parse)?marked.parse(p.text||''):esc(p.text||'');
+      if(node.id) ctx.out[node.id]=e; break;
+    case 'Input': e=document.createElement('input'); e.className='pl-input'; e.placeholder=p.placeholder||''; e.value=p.value||'';
+      if(node.id){ ctx.state[node.id]=e.value; e.oninput=()=>ctx.state[node.id]=e.value; } break;
+    case 'Textarea': e=document.createElement('textarea'); e.className='pl-textarea'; e.placeholder=p.placeholder||''; e.value=p.value||'';
+      if(node.id){ ctx.state[node.id]=e.value; e.oninput=()=>ctx.state[node.id]=e.value; } break;
+    case 'Select': e=document.createElement('select'); e.className='pl-select';
+      (p.options||[]).forEach(o=>{ const op=document.createElement('option'); op.value=(o.value!=null?o.value:o); op.textContent=(o.label!=null?o.label:o); e.appendChild(op); });
+      if(p.value!=null) e.value=p.value;
+      if(node.id){ ctx.state[node.id]=e.value; e.onchange=()=>ctx.state[node.id]=e.value; } break;
+    case 'Button': e=document.createElement('button'); e.className='pl-btn'+(p.variant==='primary'?' primary':''); e.textContent=p.label||'실행';
+      e.onclick=()=>pluginAction(node.action, ctx, e); break;
+    case 'Divider': e=document.createElement('hr'); e.className='pl-divider'; break;
+    case 'List': e=document.createElement('ul'); e.className='pl-list'; (p.items||[]).forEach(it=>{ const li=document.createElement('li'); li.textContent=(''+it); e.appendChild(li); }); break;
+    case 'Table': e=document.createElement('table'); e.className='pl-table';
+      if(p.headers){ const tr=document.createElement('tr'); p.headers.forEach(h=>{ const th=document.createElement('th'); th.textContent=h; tr.appendChild(th); }); e.appendChild(tr); }
+      (p.rows||[]).forEach(r=>{ const tr=document.createElement('tr'); (r||[]).forEach(c=>{ const td=document.createElement('td'); td.textContent=(''+c); tr.appendChild(td); }); e.appendChild(tr); }); break;
+    case 'Progress': e=document.createElement('div'); e.className='pl-progress'; const i=document.createElement('i'); i.style.width=((p.value||0))+'%'; e.appendChild(i); if(node.id) ctx.out[node.id]=e; break;
+    default: e=document.createElement('div'); e.className='pl-text muted'; e.textContent='[알 수 없는 컴포넌트: '+esc(t)+']';
+  }
+  return e;
+}
+async function pluginAction(action, ctx, btn){
+  if(!action || action.type!=='generate') return;
+  const prompt=pluginTmpl(action.prompt||'', ctx.state).trim(); if(!prompt) return;
+  const out=ctx.out[action.output];
+  if(out) out.innerHTML='<span class="caret"></span>';
+  if(btn) btn.disabled=true;
+  let full='';
+  try{
+    const res=await api('/plugins/'+encodeURIComponent(ctx.pluginId)+'/query/stream',{method:'POST',body:JSON.stringify({question:prompt})});
+    const reader=res.body.getReader(); const dec=new TextDecoder(); let buf='';
+    while(true){
+      const {done,value}=await reader.read(); if(done) break;
+      buf+=dec.decode(value,{stream:true}); const parts=buf.split('\n\n'); buf=parts.pop();
+      for(const pr of parts){
+        if(!pr.startsWith('data: ')) continue; const ev=JSON.parse(pr.slice(6));
+        if(ev.type==='queued'){ if(out) out.innerHTML='<span class="txt" style="color:var(--text2)">대기 중… 다른 작업 완료 후 진행</span><span class="caret"></span>'; }
+        else if(ev.type==='meta'){ if(out&&!ev.refused) out.innerHTML='<span class="caret"></span>'; }
+        else if(ev.type==='token'){ full+=ev.text; if(out) out.innerHTML=renderAnswer(full)+'<span class="caret"></span>'; }
+        else if(ev.type==='done'){ if(out){ const setId=citeSets.push(ev.citations||[])-1; out.innerHTML=renderAnswerSet(full,setId); } }
+      }
+    }
+  }catch(e){ if(out) out.textContent='오류: '+(e&&e.message||e); }
+  if(btn) btn.disabled=false;
+}
+
+// ---- flow-DSL 인터프리터 (선언형 데이터를 우리 호스트가 실행) ----
+function pluginRenderInto(box, tree, ctx){ (Array.isArray(tree)?tree:[tree]).forEach(n=>box.appendChild(pluginNode(n,ctx))); }
+function flowScroll(ctx){ const h=(ctx&&ctx.host)?ctx.host:el('pluginView'); if(h) h.scrollTop=h.scrollHeight; }
+// safe expression evaluator over flow state (NO eval/Function — arithmetic,
+// comparisons, &&/||, strings, parens, variables only). Powers "scripting".
+function flowEval(expr, state){
+  const s=''+expr; const toks=[]; let i=0;
+  while(i<s.length){
+    const c=s[i];
+    if(/\s/.test(c)){ i++; continue; }
+    if(/[0-9.]/.test(c)){ let j=i+1; while(j<s.length&&/[0-9.]/.test(s[j]))j++; toks.push({t:'num',v:parseFloat(s.slice(i,j))}); i=j; continue; }
+    if(/[A-Za-z_]/.test(c)){ let j=i+1; while(j<s.length&&/\w/.test(s[j]))j++; toks.push({t:'id',v:s.slice(i,j)}); i=j; continue; }
+    if(c==="'"||c==='"'){ let j=i+1; while(j<s.length&&s[j]!==c)j++; toks.push({t:'str',v:s.slice(i+1,j)}); i=j+1; continue; }
+    const two=s.slice(i,i+2);
+    if(['<=','>=','==','!=','&&','||'].indexOf(two)>=0){ toks.push({t:'op',v:two}); i+=2; continue; }
+    if('+-*/%()<>!'.indexOf(c)>=0){ toks.push({t:'op',v:c}); i++; continue; }
+    i++;
+  }
+  let pos=0; const peek=()=>toks[pos], nx=()=>toks[pos++];
+  function prim(){ const tk=peek(); if(!tk) return 0;
+    if(tk.t==='num'){nx();return tk.v;} if(tk.t==='str'){nx();return tk.v;}
+    if(tk.t==='id'){ nx(); const v=state[tk.v]; const n=parseFloat(v);
+      return (v!=null&&(''+v).trim()!==''&&!isNaN(n)&&isFinite(n)&&(''+n)===(''+v).trim())?n:(v!=null?v:0); }
+    if(tk.v==='('){ nx(); const e=orE(); if(peek()&&peek().v===')')nx(); return e; }
+    if(tk.v==='!'){ nx(); return prim()?0:1; }
+    if(tk.v==='-'){ nx(); return -prim(); }
+    nx(); return 0; }
+  function mul(){ let a=prim(); while(peek()&&['*','/','%'].indexOf(peek().v)>=0){ const o=nx().v,b=prim(); a=o==='*'?a*b:o==='/'?a/b:a%b; } return a; }
+  function add(){ let a=mul(); while(peek()&&['+','-'].indexOf(peek().v)>=0){ const o=nx().v,b=mul(); a=o==='+'?((typeof a==='string'||typeof b==='string')?(''+a+b):a+b):a-b; } return a; }
+  function cmp(){ let a=add(); while(peek()&&['<','>','<=','>=','==','!='].indexOf(peek().v)>=0){ const o=nx().v,b=add(); a=o==='<'?(a<b?1:0):o==='>'?(a>b?1:0):o==='<='?(a<=b?1:0):o==='>='?(a>=b?1:0):o==='=='?(a==b?1:0):(a!=b?1:0); } return a; }
+  function andE(){ let a=cmp(); while(peek()&&peek().v==='&&'){ nx(); const b=cmp(); a=(a&&b)?1:0; } return a; }
+  function orE(){ let a=andE(); while(peek()&&peek().v==='||'){ nx(); const b=andE(); a=(a||b)?1:0; } return a; }
+  try{ return orE(); }catch(e){ return 0; }
+}
+// apply a step/option `set` map (string→template, {expr}→evaluate)
+function flowApplySet(vars, ctx){
+  for(const k in (vars||{})){ const v=vars[k];
+    ctx.state[k]=(v&&typeof v==='object'&&v.expr!=null)?flowEval(v.expr,ctx.state):pluginTmpl(''+v,ctx.state); }
+  renderStatus(ctx);
+}
+// live character status window (rendered in the plugin sidebar surface)
+function renderStatus(ctx){
+  if(!ctx||!ctx.status||!ctx.statusEl) return;
+  const s=ctx.status;
+  let h=`<div class="status-win"><div class="status-title">${esc(s.title||'상태')}</div>`;
+  (s.rows||[]).forEach(r=>{
+    const val=pluginTmpl(''+(r.value!=null?r.value:''), ctx.state);
+    h+=`<div class="status-row"><span class="sl">${esc(r.label||'')}</span><span class="sv">${esc(val)}${r.bar&&r.bar.max?(' / '+r.bar.max):''}</span></div>`;
+    if(r.bar){ const max=r.bar.max||100, num=parseFloat(val)||0, pct=Math.max(0,Math.min(100, max?num/max*100:0));
+      const col=pct<=25?'#dc2626':pct<=50?'#d97706':'var(--accent)';
+      h+=`<div class="status-bar"><i style="width:${pct}%;background:${col}"></i></div>`; }
+  });
+  h+='</div>';
+  ctx.statusEl.innerHTML=h;
+}
+// derive {status, seed} from a mode/project's stats declaration
+function novelStatusSeed(mode){
+  const seed={}; const rows=[];
+  (mode.stats||[]).forEach(s=>{ if(!s||!s.key) return;
+    seed[s.key]=s.initial;
+    if(s.show!==false){ const r={label:s.label||s.key, value:'{{'+s.key+'}}'};
+      if(s.bar&&s.max!=null) r.bar={max:s.max}; rows.push(r); } });
+  const status=mode.status || (rows.length?{title:(mode.label||'상태'),rows}:null);
+  return {status, seed};
+}
+async function runPluginFlow(pluginId, flow, statusSpec, seed, opts){
+  opts=opts||{};
+  const host=opts.host||el('pluginView'); host.innerHTML='';
+  const story=document.createElement('div'); story.className='pl-box'; host.appendChild(story);
+  const ctx={pluginId, state:Object.assign({}, seed||{}), story, host, out:{},
+    status:statusSpec||null, statusEl:opts.statusEl||el('plugin-sidebar'),
+    preview:!!opts.preview, persona:opts.persona||''};
+  renderStatus(ctx);
+  const start=flow.start || (flow.steps && Object.keys(flow.steps)[0]);
+  await flowGo(flow, start, ctx);
+}
+async function flowGo(flow, id, ctx){
+  const step=(flow.steps||{})[id]; if(!step) return;
+  const t=step.type;
+  if(t==='set'){ flowApplySet(step.vars, ctx); return flowGo(flow, step.next, ctx); }
+  if(t==='text'){ const box=document.createElement('div'); box.className='pl-md ansmd';
+    const txt=pluginTmpl(step.text||'', ctx.state);
+    box.innerHTML=(window.marked&&marked.parse)?marked.parse(txt):esc(txt);
+    ctx.story.appendChild(box); flowScroll(ctx); return flowGo(flow, step.next, ctx); }
+  if(t==='goto'){ return flowGo(flow, step.to, ctx); }
+  if(t==='if'){ const c=step.cond||{}; let ok;
+    if(c.expr!=null){ ok=!!flowEval(c.expr, ctx.state); }
+    else { const cur=''+(ctx.state[c.var]!=null?ctx.state[c.var]:''); ok=cur===(''+(c.equals!=null?c.equals:'')); }
+    return flowGo(flow, ok?step.then:step.else, ctx); }
+  if(t==='render'){ const box=document.createElement('div'); ctx.story.appendChild(box); pluginRenderInto(box, step.ui||[], ctx); flowScroll(ctx); return flowGo(flow, step.next, ctx); }
+  if(t==='choice'){ return flowChoice(flow, step, ctx); }
+  if(t==='input'){ return flowInputStep(flow, step, ctx); }
+  if(t==='generate'){ return flowGenerate(flow, step, ctx); }
+  if(t==='end'){ const d=document.createElement('div'); d.className='pl-text muted'; d.textContent='— 끝 —'; ctx.story.appendChild(d); flowScroll(ctx); return; }
+}
+function flowChoice(flow, step, ctx){
+  const wrap=document.createElement('div'); wrap.className='flow-choices';
+  if(step.prompt){ const q=document.createElement('div'); q.className='pl-text muted'; q.textContent=pluginTmpl(step.prompt, ctx.state); wrap.appendChild(q); }
+  (step.options||[]).forEach(opt=>{
+    const btn=document.createElement('button'); btn.className='pl-btn'; btn.textContent=opt.label||'선택';
+    btn.onclick=()=>{
+      wrap.querySelectorAll('button').forEach(b=>b.disabled=true);
+      const chosen=document.createElement('div'); chosen.className='flow-chosen'; chosen.textContent='▸ '+(opt.label||''); wrap.appendChild(chosen);
+      if(opt.set){ flowApplySet(opt.set, ctx); }
+      flowGo(flow, opt.goto||opt.next, ctx);
+    };
+    wrap.appendChild(btn);
+  });
+  ctx.story.appendChild(wrap); flowScroll(ctx);
+}
+function flowInputStep(flow, step, ctx){
+  const wrap=document.createElement('div'); wrap.className='flow-input';
+  if(step.label){ const l=document.createElement('div'); l.className='pl-text muted'; l.style.width='100%'; l.textContent=step.label; wrap.appendChild(l); }
+  const inp=document.createElement('input'); inp.className='pl-input'; inp.placeholder=step.placeholder||'';
+  const submit=()=>{ if(step.into){ ctx.state[step.into]=inp.value; renderStatus(ctx); } inp.disabled=true; flowGo(flow, step.goto||step.next, ctx); };
+  inp.onkeydown=(e)=>{ if(e.key==='Enter'){ e.preventDefault(); submit(); } };
+  wrap.appendChild(inp);
+  const b=document.createElement('button'); b.className='pl-btn primary'; b.textContent='확인'; b.onclick=submit; wrap.appendChild(b);
+  ctx.story.appendChild(wrap); flowScroll(ctx);
+}
+async function flowGenerate(flow, step, ctx){
+  const prompt=pluginTmpl(step.prompt||'', ctx.state).trim();
+  const out=document.createElement('div'); out.className='pl-md ansmd'; out.innerHTML='<span class="caret"></span>';
+  ctx.story.appendChild(out); flowScroll(ctx);
+  let full='';
+  try{
+    const url=ctx.preview?'/novels/preview/stream':'/plugins/'+encodeURIComponent(ctx.pluginId)+'/query/stream';
+    const body=ctx.preview?{question:prompt, persona:ctx.persona||''}:{question:prompt, grounded: !!step.grounded};
+    const res=await api(url,{method:'POST',body:JSON.stringify(body)});
+    const reader=res.body.getReader(); const dec=new TextDecoder(); let buf='';
+    while(true){
+      const {done,value}=await reader.read(); if(done) break;
+      buf+=dec.decode(value,{stream:true}); const parts=buf.split('\n\n'); buf=parts.pop();
+      for(const pr of parts){
+        if(!pr.startsWith('data: ')) continue; const ev=JSON.parse(pr.slice(6));
+        if(ev.type==='queued'){ out.innerHTML='<span class="txt" style="color:var(--text2)">대기 중…</span><span class="caret"></span>'; }
+        else if(ev.type==='token'){ full+=ev.text; out.innerHTML=renderAnswer(full)+'<span class="caret"></span>'; flowScroll(ctx); }
+        else if(ev.type==='done'){ if(step.grounded&&!ctx.preview){ const setId=citeSets.push(ev.citations||[])-1; out.innerHTML=renderAnswerSet(full,setId); } else out.innerHTML=renderAnswer(full); }
+      }
+    }
+  }catch(e){ out.textContent='오류: '+(e&&e.message||e); }
+  if(step.into){ ctx.state[step.into]=full; renderStatus(ctx); }
+  return flowGo(flow, step.next, ctx);
+}
+// ============ T2 WASM plugin runtime (mediated host API) ============
+// A code plugin ships a .wasm module. We instantiate it with ONLY the
+// mediated host imports below (ui/generate/storage/export/preview) — there is
+// NO network import, so a plugin can compute, persist and render but can never
+// exfiltrate. The plugin's UI is host-rendered from component trees it emits;
+// its logic runs sandboxed in WASM.
+const WASMH={ctx:null};
+function wStr(ctx,s){ const b=new TextEncoder().encode(s==null?'':s); const ptr=ctx.exports.alloc(b.length); new Uint8Array(ctx.exports.memory.buffer,ptr,b.length).set(b); return [ptr,b.length]; }
+function wFree(ctx,ptr,len){ if(ctx.exports.dealloc) ctx.exports.dealloc(ptr,len); }
+function rStr(ctx,ptr,len){ return new TextDecoder('utf-8').decode(new Uint8Array(ctx.exports.memory.buffer,Number(ptr),Number(len))); }
+function handleWasmErr(ctx,e){ console.error('[wasm]',e); toast('플러그인 오류'); }
+function wasmCall1(ctx,fn,s){ const [p,l]=wStr(ctx,s); try{ ctx.exports[fn](p,l); }catch(e){ handleWasmErr(ctx,e); } finally{ wFree(ctx,p,l); } }
+function wasmFire(ctx,handler,payload){ const [p1,l1]=wStr(ctx,handler); const [p2,l2]=wStr(ctx,payload||''); try{ ctx.exports.on_event(p1,l1,p2,l2); }catch(e){ handleWasmErr(ctx,e); } finally{ wFree(ctx,p1,l1); wFree(ctx,p2,l2); } }
+function wasmDeliverGen(ctx,reqId,text){ const [p,l]=wStr(ctx,text); try{ ctx.exports.on_generate_done(reqId,p,l); }catch(e){ handleWasmErr(ctx,e); } finally{ wFree(ctx,p,l); } }
+
+function wasmImports(ctx){
+  return {
+    abort:(msg,file,line,col)=>{ console.error('[wasm abort]',Number(line),Number(col)); },
+    host_log:(p,l)=>console.log('[wasm]',rStr(ctx,p,l)),
+    host_toast:(p,l)=>toast(rStr(ctx,p,l)),
+    host_ui_render:(p,l)=>wasmRenderSurface(ctx,rStr(ctx,p,l)),
+    host_generate:(reqId,p,l)=>wasmHostGenerate(ctx,Number(reqId),rStr(ctx,p,l)),
+    host_storage_save:(p,l)=>wasmStorageSave(ctx,rStr(ctx,p,l)),
+    host_storage_delete:(p,l)=>wasmStorageDelete(ctx,rStr(ctx,p,l)),
+    host_export:(p,l)=>wasmExport(ctx,rStr(ctx,p,l)),
+    host_preview:(p,l)=>wasmPreview(ctx,rStr(ctx,p,l)),
+  };
+}
+async function launchWasmPlugin(p){
+  const ctx={pid:p.id, plugin:p, host:el('pluginView'), sidebar:el('plugin-sidebar')};
+  ctx.host.innerHTML='<div class="empty">플러그인 로딩 중…</div>';
+  try{
+    const res=await api('/plugins/'+encodeURIComponent(p.id)+'/asset?file='+encodeURIComponent(p.entry));
+    if(!res.ok) throw new Error('asset '+res.status);
+    const bytes=await res.arrayBuffer();
+    const imp=wasmImports(ctx);
+    const {instance}=await WebAssembly.instantiate(bytes,{env:imp, main:imp});
+    ctx.exports=instance.exports; WASMH.ctx=ctx;
+    await wasmLoadInit(ctx);
+  }catch(e){ ctx.host.innerHTML='<div class="empty">플러그인 로드 실패<br><span style="font-size:11px;color:var(--muted)">'+esc(e&&e.message||e)+'</span></div>'; }
+}
+async function wasmLoadInit(ctx){
+  const store={};
+  try{ const kr=await api('/host/storage/'+encodeURIComponent(ctx.pid)+'/list'); const keys=(await kr.json()).keys||[];
+    for(const k of keys){ const r=await api('/host/storage/'+encodeURIComponent(ctx.pid)+'/load?key='+encodeURIComponent(k)); store[k]=(await r.json()).value; }
+  }catch(e){}
+  wasmCall1(ctx,'on_init', JSON.stringify({storage:store}));
+}
+// ---- host-rendered component tree (from the plugin's emitted JSON) ----
+function wasmRenderSurface(ctx,json){
+  let msg; try{ msg=JSON.parse(json); }catch(e){ return; }
+  const sidebar=msg.surface==='sidebar';
+  const target=sidebar?ctx.sidebar:ctx.host; if(!target) return;
+  target.innerHTML='';
+  const box=document.createElement('div'); box.className=sidebar?'':'pl-box';
+  (msg.body||[]).forEach(n=>box.appendChild(wasmNode(ctx,n)));
+  target.appendChild(box);
+}
+function wasmBtnClass(v){ if(v==='primary') return 'pl-btn primary'; if(v==='ai') return 'pl-btn ai'; if(v==='tab') return 'nv-tab'; if(v==='tabon') return 'nv-tab active';
+  if(v&&v.indexOf('mini')===0) return 'nv-'+v; return 'pl-btn'; }
+function wasmNode(ctx,node){
+  const t=node&&node.t; let e;
+  switch(t){
+    case 'Text': e=document.createElement('div'); e.className='pl-text'+(node.muted?' muted':''); e.textContent=node.text||''; break;
+    case 'MD': e=document.createElement('div'); e.className='pl-md ansmd'; e.innerHTML=(window.marked&&marked.parse)?marked.parse(node.text||''):esc(node.text||''); break;
+    case 'Hr': e=document.createElement('hr'); e.className='pl-divider'; break;
+    case 'Btn': e=document.createElement('button'); e.className=wasmBtnClass(node.variant||''); e.textContent=node.label||'';
+      e.onclick=(ev)=>{ ev.stopPropagation(); wasmFire(ctx,node.ev,''); }; break;
+    case 'In': e=document.createElement('input'); e.className='nv-in'; if(node.num) e.type='number'; e.placeholder=node.ph||''; e.value=node.val!=null?node.val:'';
+      if(node.w) e.style.maxWidth=node.w; e.onchange=()=>wasmFire(ctx,node.ev,e.value); e.onclick=(ev)=>ev.stopPropagation(); break;
+    case 'TA': e=document.createElement('textarea'); e.className='nv-ta'; e.placeholder=node.ph||''; e.value=node.val!=null?node.val:'';
+      e.onchange=()=>wasmFire(ctx,node.ev,e.value); e.onclick=(ev)=>ev.stopPropagation(); break;
+    case 'Sel': e=document.createElement('select'); e.className='nv-sel'; if(node.w) e.style.width=node.w;
+      (node.opts||[]).forEach(o=>{ const op=document.createElement('option'); op.value=o.v; op.textContent=o.l; e.appendChild(op); });
+      if(node.val!=null) e.value=node.val; e.onchange=()=>wasmFire(ctx,node.ev,e.value); e.onclick=(ev)=>ev.stopPropagation(); break;
+    case 'Chk': { e=document.createElement('label'); e.style.cssText='font-size:11px;display:flex;align-items:center;gap:3px'; const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=!!node.checked;
+      cb.onchange=()=>wasmFire(ctx,node.ev, cb.checked?'1':'0'); cb.onclick=(ev)=>ev.stopPropagation(); e.appendChild(cb); e.appendChild(document.createTextNode(node.label||'')); break; }
+    case 'Row': e=document.createElement('div'); e.className='nv-row'; (node.c||[]).forEach(c=>e.appendChild(wasmNode(ctx,c))); break;
+    case 'Col': e=document.createElement('div'); e.style.cssText='display:flex;flex-direction:column;'; (node.c||[]).forEach(c=>e.appendChild(wasmNode(ctx,c))); break;
+    case 'Card': e=document.createElement('div'); e.className=node.cls||''; (node.c||[]).forEach(c=>e.appendChild(wasmNode(ctx,c))); break;
+    case 'Item': e=document.createElement('div'); e.className=node.cls||''; if(node.ev) e.onclick=()=>wasmFire(ctx,node.ev,''); (node.c||[]).forEach(c=>e.appendChild(wasmNode(ctx,c))); break;
+    default: e=document.createElement('span');
+  }
+  return e;
+}
+// ---- mediated capabilities ----
+async function wasmHostGenerate(ctx,reqId,json){
+  let req; try{ req=JSON.parse(json); }catch(e){ req={}; }
+  let full='';
+  try{
+    const res=await api('/host/generate/stream',{method:'POST',body:JSON.stringify({question:req.prompt||'', persona:req.persona||'', grounded:!!req.grounded})});
+    const reader=res.body.getReader(); const dec=new TextDecoder(); let buf='';
+    while(true){ const {done,value}=await reader.read(); if(done) break;
+      buf+=dec.decode(value,{stream:true}); const parts=buf.split('\n\n'); buf=parts.pop();
+      for(const pr of parts){ if(!pr.startsWith('data: ')) continue; const ev=JSON.parse(pr.slice(6)); if(ev.type==='token') full+=ev.text; } }
+  }catch(e){ full=''; }
+  wasmDeliverGen(ctx,reqId,full);
+}
+function wasmStorageSave(ctx,json){ api('/host/storage/'+encodeURIComponent(ctx.pid)+'/save',{method:'POST',body:json}).catch(()=>{}); }
+function wasmStorageDelete(ctx,json){ api('/host/storage/'+encodeURIComponent(ctx.pid)+'/delete',{method:'POST',body:json}).catch(()=>{}); }
+async function wasmExport(ctx,json){
+  try{ const r=await api('/host/plugins/export',{method:'POST',body:'{"manifest":'+json+'}'}); const res=await r.json();
+    if(res.ok){ toast('플러그인으로 설치됨: '+res.name); await loadPlugins(); } else toast('설치 실패'); }
+  catch(e){ toast('설치 실패'); }
+}
+function wasmPreview(ctx,json){
+  let spec; try{ spec=JSON.parse(json); }catch(e){ return; }
+  showPluginPreview();
+  const mode={label:spec.title||'미리보기', persona:spec.persona||'', stats:spec.stats||[], status:null, flow:spec.flow};
+  const ss=novelStatusSeed(mode);
+  el('pv-status').classList.toggle('hidden', !ss.status);
+  runPluginFlow('__preview__', mode.flow, ss.status, ss.seed, {preview:true, persona:spec.persona, host:el('pv-flow'), statusEl:el('pv-status')});
+}
+function showPluginPreview(){ el('pv-overlay').classList.remove('hidden'); }
+function hidePluginPreview(){ el('pv-overlay').classList.add('hidden'); el('pv-flow').innerHTML=''; el('pv-status').innerHTML=''; }
+function toast(msg){ let t=el('nv-toast'); if(!t){ t=document.createElement('div'); t.id='nv-toast'; t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:8px 16px;border-radius:8px;font-size:12.5px;z-index:200;opacity:0;transition:opacity .2s'; document.body.appendChild(t); } t.textContent=msg; t.style.opacity='1'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.opacity='0',1800); }
+
+
 async function pluginAsk(){
   if(!curPlugin) return;
   const q=el('pq').value.trim(); if(!q) return;

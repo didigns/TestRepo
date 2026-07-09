@@ -257,6 +257,23 @@ class RagEngine:
                "citations": [c.__dict__ for c in ans.citations],
                "warnings": ans.warnings}
 
+    def free_stream(self, prompt: str, persona: Optional[str] = None,
+                    temperature: Optional[float] = None):
+        """Free (ungrounded) generation for flow `generate` steps with
+        grounded=false — creative/interactive use. No retrieval, no citations."""
+        sys = _with_persona(GENERAL_SYSTEM, persona)
+        temp = temperature if temperature is not None else getattr(
+            self.settings, "general_temperature", 0.7)
+        yield {"type": "meta", "refused": False, "confidence": 0.0}
+        try:
+            for tok in self.provider.generate_stream(prompt, system=sys, temperature=temp):
+                yield {"type": "token", "text": tok}
+        except Exception:
+            raw = self.provider.generate(prompt, system=sys, temperature=temp)
+            yield {"type": "token", "text": raw}
+        yield {"type": "done", "grounded": False, "refused": False,
+               "citations": [], "warnings": []}
+
     # ---- helpers -----------------------------------------------------
     def _pack(self, hits: List[Retrieved], budget_tokens: int):
         """Pack chunks into a token budget, labeling each [S1..Sn]."""

@@ -525,11 +525,16 @@ def plugins_enable(pid: str, req: PluginEnableReq, _=Depends(auth)):
     return {"ok": True}
 
 
+class PluginQueryReq(BaseModel):
+    question: str
+    grounded: bool = True     # False => free/creative generation (no retrieval)
+
+
 @app.post("/plugins/{pid}/query/stream")
-def plugin_query_stream(pid: str, req: QueryReq, _=Depends(auth)):
-    """Run a plugin's mode: the plugin's persona steers generation while the
-    engine's grounding + citation rules stay in force. Passes through the same
-    inference queue as chat (serial on low-end hardware)."""
+def plugin_query_stream(pid: str, req: PluginQueryReq, _=Depends(auth)):
+    """Run a plugin's generation. grounded=True → RAG(검색+인용, 폴더스코프);
+    grounded=False → free 생성(무제한 로컬, flow-DSL 크리에이티브용). 둘 다 플러그인
+    페르소나를 적용하고 추론 큐(직렬)를 통과한다."""
     import json as _json
     from .plugins import loader
     persona = loader.persona_of(pid)
@@ -551,8 +556,12 @@ def plugin_query_stream(pid: str, req: QueryReq, _=Depends(auth)):
                 with _QWLOCK:
                     _QWAIT["n"] -= 1
         try:
-            for ev in _state["engine"].query_stream(
-                    req.question, persona=persona, folders=folders):
+            if req.grounded:
+                stream = _state["engine"].query_stream(
+                    req.question, persona=persona, folders=folders)
+            else:
+                stream = _state["engine"].free_stream(req.question, persona=persona)
+            for ev in stream:
                 yield sse(ev)
         finally:
             _QGATE.release()
@@ -585,6 +594,125 @@ def plugins_open_folder(_=Depends(auth)):
         return {"ok": True, "path": path}
     except Exception as e:
         raise HTTPException(500, str(e))
+
+
+# ================= Generalized Plugin Host API (T2) =====================
+# Mediated capabilities every plugin (declarative, flow-DSL, or WASM) uses.
+# There is NO network capability here — a plugin can generate, persist, and
+# render, but never reach the network, so exfiltration is impossible.
+class HostGenerateReq(BaseModel):
+    question: str
+    persona: str = ""
+    grounded: bool = False
+
+
+class HostStorageSaveReq(BaseModel):
+    key: str
+    value: object = None
+
+
+class HostStorageDelReq(BaseModel):
+    key: str
+
+
+class HostExportReq(BaseModel):
+    manifest: dict
+
+
+@app.get("/plugins/{pid}/asset")
+def plugin_asset(pid: str, file: str, _=Depends(auth)):
+    """Serve a plugin-relative asset (e.g. its compiled .wasm module)."""
+    from .plugins import loader
+    path = loader.asset_path(pid, file)
+    if not path:
+        raise HTTPException(404, "asset not found")
+    data = path.read_bytes()
+    media = "application/wasm" if str(path).endswith(".wasm") else "application/octet-stream"
+    return Response(content=data, media_type=media)
+
+
+@app.post("/host/generate/stream")
+def host_generate_stream(req: HostGenerateReq, _=Depends(auth)):
+    """model:generate — ungrounded free generation (or grounded RAG) for any
+    plugin. Persona passed inline. Serialized through the inference queue."""
+    import json as _json
+
+    def sse(ev):
+        return f"data: {_json.dumps(ev, ensure_ascii=False)}\n\n"
+
+    def gen():
+        if not _QGATE.acquire(blocking=False):
+            with _QWLOCK:
+                _QWAIT["n"] += 1
+            try:
+                yield sse({"type": "queued", "waiting": _queue_waiting()})
+                _QGATE.acquire()
+            finally:
+                with _QWLOCK:
+                    _QWAIT["n"] -= 1
+        try:
+            persona = req.persona or None
+            if req.grounded:
+                stream = _state["engine"].query_stream(req.question, persona=persona)
+            else:
+                stream = _state["engine"].free_stream(req.question, persona=persona)
+            for ev in stream:
+                yield sse(ev)
+        finally:
+            _QGATE.release()
+    return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+@app.post("/host/storage/{pid}/save")
+def host_storage_save(pid: str, req: HostStorageSaveReq, _=Depends(auth)):
+    from .plugins import host_storage
+    host_storage.save(pid, req.key, req.value)
+    return {"ok": True}
+
+
+@app.get("/host/storage/{pid}/load")
+def host_storage_load(pid: str, key: str, _=Depends(auth)):
+    from .plugins import host_storage
+    return {"value": host_storage.load(pid, key)}
+
+
+@app.get("/host/storage/{pid}/list")
+def host_storage_list(pid: str, _=Depends(auth)):
+    from .plugins import host_storage
+    return {"keys": host_storage.keys(pid)}
+
+
+@app.post("/host/storage/{pid}/delete")
+def host_storage_delete(pid: str, req: HostStorageDelReq, _=Depends(auth)):
+    from .plugins import host_storage
+    return {"ok": host_storage.delete(pid, req.key)}
+
+
+@app.post("/host/plugins/export")
+def host_plugins_export(req: HostExportReq, _=Depends(auth)):
+    """A plugin builds a full manifest and asks the host to install it as a new,
+    playable plugin. Network is force-disabled on anything installed this way."""
+    import json as _json
+    import re as _re
+    from .plugins import loader
+    from .config import PLUGINS_DIR
+    m = dict(req.manifest or {})
+    if not m.get("id") or not m.get("name"):
+        raise HTTPException(400, "manifest에 id/name이 필요합니다")
+    # enforce the zero-exposure invariant on anything we write to disk
+    perms = dict(m.get("permissions") or {})
+    perms["network"] = False
+    m["permissions"] = perms
+    pid = "novel-" + _re.sub(r"[^a-zA-Z0-9가-힣_\-]", "-", str(m["id"])).strip("-").lower()
+    m["id"] = pid
+    PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
+    folder = PLUGINS_DIR / pid
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "plugin.json").write_text(
+        _json.dumps(m, indent=2, ensure_ascii=False), encoding="utf-8")
+    loader.set_enabled(pid, True)
+    return {"ok": True, "id": pid, "name": m["name"], "path": str(folder)}
+
 
 
 @app.post("/quick-ask")

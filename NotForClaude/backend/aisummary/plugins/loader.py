@@ -94,6 +94,16 @@ def _norm_perms(m: dict) -> dict:
     return {"folders": folders, "network": bool(p.get("network", False))}
 
 
+def _is_enabled(state_entry: dict, manifest: dict) -> bool:
+    """Builtin plugins are ON by default; user plugins OFF until enabled.
+    An explicit state entry always wins. Errored manifests are never enabled."""
+    if manifest.get("_error"):
+        return False
+    if "enabled" in state_entry:
+        return bool(state_entry["enabled"])
+    return bool(manifest.get("_builtin", False))
+
+
 # ---- public API ------------------------------------------------------
 def list_plugins() -> list:
     st = _load_state()
@@ -109,7 +119,8 @@ def list_plugins() -> list:
             "builtin": bool(m.get("_builtin", False)),
             "permissions": _norm_perms(m),
             "contributes": m.get("contributes", {}) if not m.get("_error") else {},
-            "enabled": bool(s.get("enabled", False)) and not m.get("_error"),
+            "entry": m.get("entry"),      # e.g. "plugin.wasm" for T2 code plugins
+            "enabled": _is_enabled(s, m),
             "error": m.get("_error"),
         })
     out.sort(key=lambda x: (not x["builtin"], x["name"].lower()))
@@ -123,7 +134,7 @@ def get_plugin(pid: str) -> Optional[dict]:
     st = _load_state().get(pid, {})
     return {
         "manifest": m,
-        "enabled": bool(st.get("enabled", False)) and not m.get("_error"),
+        "enabled": _is_enabled(st, m),
         "permissions": _norm_perms(m),
     }
 
@@ -183,3 +194,21 @@ def uninstall(pid: str) -> bool:
 def plugins_dir() -> str:
     PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
     return str(PLUGINS_DIR)
+
+
+def asset_path(pid: str, file: str) -> Optional[Path]:
+    """Resolve a plugin-relative asset (e.g. the .wasm module) safely.
+
+    Only files *inside* the plugin's own folder are reachable — no traversal.
+    """
+    m = _scan().get(pid)
+    if not m:
+        return None
+    base = Path(m.get("_dir", "")).resolve()
+    try:
+        target = (base / file).resolve()
+    except Exception:
+        return None
+    if base != target and base not in target.parents:
+        return None                       # path traversal attempt
+    return target if target.exists() else None

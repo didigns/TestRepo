@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AISummary · 플러그인 저작 계약 (에이전트용)</title>
+<style>
+  :root{
+    --bg:#0a0d12; --panel:#12171e; --panel2:#171d26; --border:#242c37;
+    --text:#e6edf3; --text2:#9fb0c0; --muted:#66727f; --accent:#5b8cff; --accent2:#7c5bff;
+    --ok:#3fb950; --warn:#d29922; --danger:#f85149;
+    --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo",sans-serif;line-height:1.65;font-size:15px;}
+  .top{position:sticky;top:0;z-index:5;background:linear-gradient(180deg,#0a0d12,rgba(10,13,18,.92));
+    border-bottom:.5px solid var(--border);backdrop-filter:blur(6px);}
+  .top .inner{max-width:1040px;margin:0 auto;padding:16px 26px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+  .bot{font-size:20px;} .top h1{font-size:17px;font-weight:800;margin:0;flex:1;min-width:200px;letter-spacing:-.01em;}
+  .top .meta{font-size:11.5px;color:var(--muted);}
+  .copyall{font-size:13px;font-weight:700;padding:9px 18px;border-radius:9px;border:.5px solid var(--accent);
+    background:var(--accent);color:#fff;cursor:pointer;box-shadow:0 2px 10px #5b8cff33;}
+  .copyall:hover{filter:brightness(1.08);}
+  .copyall.done{background:var(--ok);border-color:var(--ok);box-shadow:none;}
+  main{max-width:1040px;margin:0 auto;padding:26px;}
+  .note{border:.5px solid var(--border);border-left:3px solid var(--accent2);background:var(--panel);
+    border-radius:9px;padding:13px 17px;margin:0 0 22px;font-size:13.5px;color:var(--text2);}
+  .note b{color:var(--text);}
+  .rulebar{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 22px;}
+  .rule{flex:1;min-width:220px;border:.5px solid var(--border);border-radius:9px;padding:11px 14px;background:var(--panel);font-size:12.8px;}
+  .rule.must{border-left:3px solid var(--ok);} .rule.mustnot{border-left:3px solid var(--danger);}
+  .rule h4{margin:0 0 5px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--text2);}
+  .rule.must h4{color:var(--ok);} .rule.mustnot h4{color:var(--danger);}
+  .rule ul{margin:0;padding-left:16px;} .rule li{margin:3px 0;}
+  .rule code{font-family:var(--mono);font-size:11.5px;color:#c9d6e3;background:var(--panel2);border-radius:4px;padding:1px 4px;}
+  .specwrap{position:relative;}
+  .speclabel{display:flex;align-items:center;justify-content:space-between;margin:0 0 8px;}
+  .speclabel h2{font-size:14px;margin:0;color:var(--text2);font-weight:650;letter-spacing:.02em;}
+  .speclabel .hint{font-size:11.5px;color:var(--muted);}
+  pre.spec{background:#05070b;border:.5px solid var(--border);border-radius:12px;padding:20px 22px;overflow:auto;
+    max-height:none;font-family:var(--mono);font-size:12.6px;line-height:1.62;color:#c2cfdc;white-space:pre;margin:0;}
+  pre.spec .h{color:#7c9cff;font-weight:700;} /* section heading */
+  pre.spec .k{color:#ff7b9c;}   /* keyword */
+  pre.spec .s{color:#9ece6a;}   /* string */
+  pre.spec .n{color:#e0af68;}   /* number */
+  pre.spec .c{color:#5c6a79;}   /* comment */
+  pre.spec .p{color:#7dcfff;}   /* prop */
+  pre.spec .must{color:#7ee787;} pre.spec .no{color:#ff9492;}
+  .foot{margin-top:26px;color:var(--muted);font-size:12px;text-align:center;}
+  .minicopy{font-size:11px;color:var(--muted);background:var(--panel);border:.5px solid var(--border);border-radius:6px;padding:3px 9px;cursor:pointer;}
+  .minicopy:hover{color:var(--text);}
+</style>
+</head>
+<body>
+<div class="top"><div class="inner">
+  <span class="bot">🤖</span>
+  <h1>플러그인 저작 계약 <span class="meta">· 에이전트용 (machine-ingestible)</span></h1>
+  <button class="copyall" id="copyAll">⧉ 전체 계약 복사</button>
+</div></div>
+
+<main>
+  <div class="note">이 페이지는 <b>사람이 아니라 코딩 에이전트(LLM)</b>가 읽고 플러그인을 생성하도록 만든 계약서입니다. 위 <b>「전체 계약 복사」</b>를 눌러 아래 스펙 전문을 에이전트 컨텍스트에 붙여넣으세요. 에이전트는 이 규약만으로 유효한 <code>plugin.json</code>과 flow-DSL / WASM 인터페이스를 생성할 수 있습니다. 사람이 읽는 설명형 문서는 <b>plugin-guide.html</b>을 보세요.</div>
+
+  <div class="rulebar">
+    <div class="rule must"><h4>MUST</h4><ul>
+      <li><code>permissions.network</code> = <code>false</code> (항상)</li>
+      <li>최소 권한 — 쓰는 <code>capability</code>만 선언</li>
+      <li>UI는 호스트 컴포넌트 트리로만</li>
+      <li>출력은 스키마에 맞는 유효 JSON</li>
+    </ul></div>
+    <div class="rule mustnot"><h4>MUST NOT</h4><ul>
+      <li>네트워크/<code>fetch</code>/외부 전송 시도</li>
+      <li>원시 HTML·JS·<code>eval</code></li>
+      <li>불필요한 폴더 권한(기본 <code>folders:[]</code>)</li>
+      <li>스키마 밖 스텝/노드 타입 사용</li>
+    </ul></div>
+  </div>
+
+  <div class="specwrap">
+    <div class="speclabel"><h2>▚ CANONICAL CONTRACT</h2><span class="hint">아래 블록 전체가 복사 대상입니다</span></div>
+<pre class="spec" id="spec"><span class="h"># AISUMMARY PLUGIN AUTHORING CONTRACT (v1)</span>
+<span class="c"># 역할: 너는 AISummary(로컬·제로노출 문서비서 앱)의 플러그인을 생성하는 에이전트다.</span>
+<span class="c"># 아래 계약을 문자 그대로 지켜라. 애매하면 더 안전/최소권한 쪽을 택하라.</span>
+
+<span class="h">## 0. 불변 규칙</span>
+- <span class="must">MUST</span>  permissions.network == false  (예외 없음. 네트워크 통로 자체가 존재하지 않음)
+- <span class="must">MUST</span>  최소 권한: 실제 쓰는 capability만 선언
+- <span class="must">MUST</span>  UI는 호스트 컴포넌트 트리로만 (원시 HTML/JS 금지)
+- <span class="must">MUST</span>  저장은 storage:local 격리 폴더로만 (경로 핸들 없음)
+- <span class="no">MUST NOT</span>  fetch/socket/외부 전송, eval, 스키마 밖 타입
+- 출력: 유효한 plugin.json + (해당 시) flow-DSL 스텝 / WASM ABI 준수
+
+<span class="h">## 1. 티어 선택 (결정 트리)</span>
+페르소나 또는 정적 폼 화면만 필요        -> T0 (declarative)
+장면/선택/분기/스탯 등 다단계 로직(데이터) -> T1 (flow-DSL)
+커스텀 코드/복잡 상태/저작 도구           -> T2 (WASM: entry + capability "code:wasm")
+기본값은 T0/T1. T2는 진짜 코드가 필요할 때만.
+
+<span class="h">## 2. MANIFEST 스키마 (plugin.json)</span>
+{
+  <span class="p">"manifestVersion"</span>: <span class="n">1</span>,                 <span class="c">// 필수</span>
+  <span class="p">"id"</span>: <span class="s">"kebab-id"</span>,                    <span class="c">// 필수, 폴더명과 일치</span>
+  <span class="p">"name"</span>: <span class="s">"표시 이름"</span>, <span class="p">"version"</span>: <span class="s">"1.0.0"</span>,   <span class="c">// 필수</span>
+  <span class="p">"author"</span>: <span class="s">""</span>, <span class="p">"description"</span>: <span class="s">""</span>,       <span class="c">// 선택</span>
+  <span class="p">"entry"</span>: <span class="s">"plugin.wasm"</span>,             <span class="c">// T2에서만</span>
+  <span class="p">"permissions"</span>: {
+    <span class="p">"folders"</span>: [],                    <span class="c">// []=문서접근없음, ["*"]=전체, ["경로"]=스코프</span>
+    <span class="p">"network"</span>: <span class="k">false</span>,                 <span class="c">// 항상 false</span>
+    <span class="p">"capabilities"</span>: [ <span class="c">/* 아래 §5에서 필요한 것만 */</span> ]
+  },
+  <span class="p">"contributes"</span>: { <span class="p">"mode"</span>: {
+    <span class="p">"label"</span>: <span class="s">"모드명"</span>, <span class="p">"icon"</span>: <span class="s">"📖"</span>,        <span class="c">// 공통(내비 표시)</span>
+    <span class="p">"persona"</span>: <span class="s">"시스템 프롬프트"</span>,          <span class="c">// T0/T1</span>
+    <span class="p">"view"</span>: [ <span class="c">/*컴포넌트*/</span> ], <span class="p">"sidebar"</span>: [ ... ],  <span class="c">// T0</span>
+    <span class="p">"flow"</span>: { <span class="p">"start"</span>:<span class="s">"id"</span>, <span class="p">"steps"</span>:{} },     <span class="c">// T1</span>
+    <span class="p">"stats"</span>: [ ... ], <span class="p">"status"</span>: { ... }        <span class="c">// T1 (status 생략시 stats로 자동)</span>
+  } }
+}
+<span class="c">// T2는 보통 mode에 label/icon만. 화면은 WASM이 런타임에 그린다.</span>
+
+<span class="h">## 3. T0 (declarative)</span>
+persona만 두거나, view에 컴포넌트 트리. 버튼 action으로 생성 트리거.
+Button.action = { "type":"generate", "prompt":"{{입력id}} ...", "output":"출력id" }
+{{id}} = 같은 화면 Input/Select의 값으로 치환.
+
+<span class="h">## 4. T1 (flow-DSL)</span>
+flow = { start:"stepId", steps:{ id: step } };  실행중 state 변수 + {{var}} 템플릿.
+STEP TYPES:
+  text     { type,"text","next" }                         고정 지문(md), LLM無
+  set      { type,"vars":{k: "{{tmpl}}" | {expr:"..."}}, "next" }
+  generate { type,"prompt","grounded":bool,"into","next" } grounded:true=검색+인용 / false=자유
+  choice   { type,"prompt"?,"options":[{"label","set"?,"goto"}] }
+  input    { type,"label"?,"into","next" }                 유저 입력 -> 변수
+  if       { type,"cond":{"expr":"..."},"then","else" }
+  goto     { type,"to" }        end { type }
+EXPR 문법 (eval 아님, 안전 파서): 숫자/문자열/변수, + - * / %, < > <= >= == !=, && ||, ( ). 그 외 금지.
+  예: {expr:"hp-20"}  {expr:"hp<=40 || sanity<=40"}
+STATS (선택): mode.stats=[{key,label,initial,max,bar,show}]
+  -> 시작시 state[key]=initial 시드 + show:true인 것들로 상태창 자동 생성.
+
+<span class="h">## 5. CAPABILITIES -> HOST API</span>
+model:generate  POST /host/generate/stream   {question,persona,grounded}  (SSE: token/done)
+storage:local   /host/storage/{pid}/{list,load,save,delete}  (플러그인 격리, 경로핸들 없음)
+ui:render       메인/사이드바 표면 렌더
+documents:read  허가 폴더 스코프 검색           knowledgePack  자기 팩 검색
+code:wasm       T2 WASM 실행
+(network 은 존재하지 않음)
+플러그인 -> 새 플러그인 설치: POST /host/plugins/export {manifest}. 기록시 network:false 강제.
+
+<span class="h">## 6. T2 WASM ABI</span>
+문자열=UTF-8/선형메모리. WASM은 alloc(size),dealloc(ptr,size),memory 를 export.
+EXPORTS(호스트가 호출):
+  on_init(ptr,len)                       {storage:{key:value}} 스냅샷
+  on_event(hPtr,hLen,pPtr,pLen)          핸들러문자열 + 값
+  on_generate_done(reqId,ptr,len)        생성 결과
+IMPORTS(WASM이 호출 = 능력의 전부):
+  host_ui_render(ptr,len)                {surface:"main"|"sidebar", body:[node]}
+  host_generate(reqId,ptr,len)           {prompt,persona} -> 결과는 on_generate_done
+  host_storage_save(ptr,len) / host_storage_delete(ptr,len)   {key,value} / {key}
+  host_export(ptr,len)                   완성 manifest 설치
+  host_preview(ptr,len)                  {persona,stats,flow} 를 호스트가 플레이
+  host_toast(ptr,len) / host_log(ptr,len)
+  env.abort(...)
+  <span class="no">// host_fetch 류 없음 -> 유출 불가</span>
+UI NODE (host_ui_render body[]):
+  {t:"Text",text,muted?}  {t:"MD",text}  {t:"Hr"}
+  {t:"In",val,ph,ev,num?} {t:"TA",val,ph,ev}  {t:"Sel",val,opts:[{v,l}],ev}
+  {t:"Chk",checked,label,ev}  {t:"Btn",label,ev,variant?}
+  {t:"Row"|"Col",c:[..]}  {t:"Card"|"Item",cls,ev?,c:[..]}
+  이벤트 -> on_event(ev, value). ev 문자열에 대상 인코딩(예 "field:s1:text").
+  텍스트 입력은 onchange(blur)로 값 전달 -> 타이핑중 리렌더로 포커스 잃지 않게 설계.
+빌드(AssemblyScript 예): asc src/main.ts -o plugin.wasm --optimize --exportRuntime --lib ./node_modules
+  (Rust wasm32-unknown-unknown, TinyGo도 가능. import/export 규약만 지키면 됨)
+
+<span class="h">## 7. 생성 절차 (RECIPE)</span>
+1) 목적 파악 -> 티어 결정(§1)
+2) manifest 작성(§2), network:false + 최소 capability
+3) T0: view/persona | T1: stats -> flow steps -> expr로 상태변화·분기
+   T2: manifest(entry) + src(main.ts) : on_init/on_event/on_generate_done 구현,
+       host_ui_render로 화면, host_storage_*로 저장, host_generate로 생성, host_export로 배포
+4) 자기검증(§8) 통과할 때까지 수정
+5) 산출물: plugin.json (+ T2면 src/main.ts, 빌드된 plugin.wasm, BUILD.md)
+
+<span class="h">## 8. 자기검증 체크리스트</span>
+[ ] manifestVersion/id/name/version 존재, JSON 유효
+[ ] permissions.network == false
+[ ] capabilities는 실제 사용하는 것만
+[ ] 문서접근 불필요 -> folders:[]
+[ ] T1: 모든 goto/next/then/else 대상이 존재하는 step id (또는 의도된 종료)
+[ ] T1: expr은 허용 문법만 사용
+[ ] T2: import에 네트워크 없음, on_event 핸들러 문자열 파싱 일관
+[ ] UI는 컴포넌트 노드만, 원시 HTML 없음
+
+<span class="h">## 9. 최소 예시</span>
+<span class="c">// T1 스탯 있는 미니 소설</span>
+{ <span class="p">"manifestVersion"</span>:<span class="n">1</span>,<span class="p">"id"</span>:<span class="s">"mini-novel"</span>,<span class="p">"name"</span>:<span class="s">"미니 소설"</span>,<span class="p">"version"</span>:<span class="s">"1.0.0"</span>,
+  <span class="p">"permissions"</span>:{<span class="p">"folders"</span>:[],<span class="p">"network"</span>:<span class="k">false</span>,<span class="p">"capabilities"</span>:[<span class="s">"model:generate"</span>,<span class="s">"ui:render"</span>]},
+  <span class="p">"contributes"</span>:{<span class="p">"mode"</span>:{<span class="p">"label"</span>:<span class="s">"미니 소설"</span>,<span class="p">"icon"</span>:<span class="s">"📖"</span>,
+    <span class="p">"persona"</span>:<span class="s">"너는 인터랙티브 소설 진행자. 2인칭, 짧게."</span>,
+    <span class="p">"stats"</span>:[{<span class="p">"key"</span>:<span class="s">"hp"</span>,<span class="p">"label"</span>:<span class="s">"체력"</span>,<span class="p">"initial"</span>:<span class="n">100</span>,<span class="p">"max"</span>:<span class="n">100</span>,<span class="p">"bar"</span>:<span class="k">true</span>,<span class="p">"show"</span>:<span class="k">true</span>}],
+    <span class="p">"flow"</span>:{<span class="p">"start"</span>:<span class="s">"s1"</span>,<span class="p">"steps"</span>:{
+      <span class="p">"s1"</span>:{<span class="p">"type"</span>:<span class="s">"generate"</span>,<span class="p">"grounded"</span>:<span class="k">false</span>,<span class="p">"prompt"</span>:<span class="s">"도입부 3문장."</span>,<span class="p">"into"</span>:<span class="s">"sc"</span>,<span class="p">"next"</span>:<span class="s">"c1"</span>},
+      <span class="p">"c1"</span>:{<span class="p">"type"</span>:<span class="s">"choice"</span>,<span class="p">"options"</span>:[
+        {<span class="p">"label"</span>:<span class="s">"싸운다(체력-30)"</span>,<span class="p">"set"</span>:{<span class="p">"hp"</span>:{<span class="p">"expr"</span>:<span class="s">"hp-30"</span>}},<span class="p">"goto"</span>:<span class="s">"r"</span>},
+        {<span class="p">"label"</span>:<span class="s">"피한다"</span>,<span class="p">"goto"</span>:<span class="s">"r"</span>}]},
+      <span class="p">"r"</span>:{<span class="p">"type"</span>:<span class="s">"if"</span>,<span class="p">"cond"</span>:{<span class="p">"expr"</span>:<span class="s">"hp<=40"</span>},<span class="p">"then"</span>:<span class="s">"bad"</span>,<span class="p">"else"</span>:<span class="s">"good"</span>},
+      <span class="p">"bad"</span>:{<span class="p">"type"</span>:<span class="s">"text"</span>,<span class="p">"text"</span>:<span class="s">"쓰러진다…"</span>,<span class="p">"next"</span>:<span class="s">"e"</span>},
+      <span class="p">"good"</span>:{<span class="p">"type"</span>:<span class="s">"text"</span>,<span class="p">"text"</span>:<span class="s">"살아남았다."</span>,<span class="p">"next"</span>:<span class="s">"e"</span>},
+      <span class="p">"e"</span>:{<span class="p">"type"</span>:<span class="s">"end"</span>}}}}}
+}
+<span class="c"># END OF CONTRACT</span></pre>
+  </div>
+
+  <div class="foot">이 계약은 앱의 실제 구현(T0/T1/T2 + host API)과 일치합니다 · 전체 아키텍처: docs/PLUGIN_ARCHITECTURE.md · 사람용 문서: plugin-guide.html</div>
+</main>
+
+<script>
+document.getElementById('copyAll').onclick=function(){
+  const txt=document.getElementById('spec').innerText;
+  navigator.clipboard.writeText(txt).then(()=>{ this.textContent='✓ 복사됨 — 에이전트에 붙여넣기'; this.classList.add('done');
+    setTimeout(()=>{ this.textContent='⧉ 전체 계약 복사'; this.classList.remove('done'); },2000); });
+};
+</script>
+</body>
+</html>

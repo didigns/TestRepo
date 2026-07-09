@@ -7,7 +7,7 @@
     "tauri": "tauri",
     "dev": "node dev.mjs",
     "dev:app-only": "tauri dev",
-    "dev:backend": "python -m aisummary.api",
+    "dev:backend": "cd ../backend && python run.py",
     "build": "tauri build"
   },
   "devDependencies": {

@@ -1,0 +1,34 @@
+{
+  "manifestVersion": 1,
+  "id": "brief-builder",
+  "name": "브리핑 작성기",
+  "version": "0.1.0",
+  "author": "AISummary",
+  "description": "주제와 분량을 고르면 내 문서를 근거로 실무 브리핑을 만들어 줍니다. (선언형 UI 데모)",
+  "permissions": {
+    "folders": ["*"],
+    "network": false,
+    "capabilities": ["model:generate", "ui:render", "documents:read"]
+  },
+  "contributes": {
+    "mode": {
+      "label": "브리핑 작성기",
+      "icon": "🗒️",
+      "persona": "너는 내 문서를 근거로 간결한 실무 브리핑을 쓰는 비서야. 핵심만 불릿으로, 중요한 숫자·날짜·이름은 놓치지 말고, 근거는 [Sn]으로 인용해.",
+      "view": [
+        { "type": "Text", "props": { "text": "주제와 분량을 고르고 생성을 누르세요.", "muted": true } },
+        { "type": "Input", "id": "topic", "props": { "placeholder": "브리핑 주제 (예: 3분기 계약 리스크)" } },
+        { "type": "Select", "id": "length", "props": { "value": "보통", "options": [
+            { "value": "짧게", "label": "짧게 (핵심 3줄)" },
+            { "value": "보통", "label": "보통" },
+            { "value": "자세히", "label": "자세히" } ] } },
+        { "type": "Button", "props": { "label": "브리핑 생성", "variant": "primary" },
+          "action": { "type": "generate",
+            "prompt": "주제 '{{topic}}'에 대해 {{length}} 분량으로 실무 브리핑을 작성해줘.",
+            "output": "out" } },
+        { "type": "Divider" },
+        { "type": "Markdown", "id": "out", "props": { "text": "" } }
+      ]
+    }
+  }
+}
