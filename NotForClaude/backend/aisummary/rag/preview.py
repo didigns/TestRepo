@@ -104,23 +104,64 @@ def list_files(settings: Settings, folder: str) -> List[dict]:
     return out
 
 
+def indexed_files() -> List[dict]:
+    """Every indexed file as [{name, path}] — powers @-mention file tagging."""
+    out = [{"name": os.path.basename(p), "path": p} for p in _state().keys()]
+    out.sort(key=lambda x: x["name"].lower())
+    return out
+
+
+# Rendering a PDF page (open + rasterize + PNG encode) is the slow part of
+# preview, so cache the result in-process keyed by (path, mtime, page, dpi).
+# Repeat views and prefetched pages then return instantly. Bounded LRU.
+from collections import OrderedDict as _OrderedDict
+
+_PAGE_CACHE: "_OrderedDict[tuple, bytes]" = _OrderedDict()
+_PAGE_CACHE_MAX = 64
+_PC_CACHE: dict = {}  # (path, mtime) -> page_count
+
+
+def _mtime(path: str) -> float:
+    try:
+        return os.path.getmtime(path)
+    except OSError:
+        return 0.0
+
+
 def render_page_png(path: str, page: int, dpi: int = 130) -> Optional[bytes]:
-    """Render a PDF page (1-based) to PNG bytes. None if not a PDF."""
+    """Render a PDF page (1-based) to PNG bytes. None if not a PDF. Cached by
+    (path, mtime, page, dpi) so repeat/prefetched views are instant."""
     if not path.lower().endswith(".pdf"):
         return None
+    key = (path, _mtime(path), page, dpi)
+    hit = _PAGE_CACHE.get(key)
+    if hit is not None:
+        _PAGE_CACHE.move_to_end(key)
+        return hit
     import fitz  # pymupdf
     with fitz.open(path) as doc:
+        _PC_CACHE[(path, key[1])] = doc.page_count  # warm page_count for free
         idx = max(0, min(page - 1, doc.page_count - 1))
         pix = doc[idx].get_pixmap(dpi=dpi)
-        return pix.tobytes("png")
+        png = pix.tobytes("png")
+    _PAGE_CACHE[key] = png
+    _PAGE_CACHE.move_to_end(key)
+    while len(_PAGE_CACHE) > _PAGE_CACHE_MAX:
+        _PAGE_CACHE.popitem(last=False)
+    return png
 
 
 def page_count(path: str) -> int:
     if not path.lower().endswith(".pdf"):
         return 1
+    key = (path, _mtime(path))
+    cached = _PC_CACHE.get(key)
+    if cached is not None:
+        return cached
     import fitz
     with fitz.open(path) as doc:
-        return doc.page_count
+        _PC_CACHE[key] = doc.page_count
+        return _PC_CACHE[key]
 
 
 def find_highlights(path: str, page: int, query: str) -> List[dict]:

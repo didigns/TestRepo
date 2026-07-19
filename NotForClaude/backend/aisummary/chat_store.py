@@ -132,12 +132,14 @@ def get_session(sid: str) -> Optional[dict]:
 
 
 def append_message(sid: str, role: str, content: str,
-                   citations: Optional[list] = None) -> Optional[dict]:
+                   citations: Optional[list] = None,
+                   tools: Optional[list] = None) -> Optional[dict]:
     rec = get_session(sid)
     if not rec:
         return None
     rec.setdefault("messages", []).append({
         "role": role, "content": content or "", "citations": citations or [],
+        "tools": tools or [],
     })
     rec["updated_at"] = _now()
     _write(rec)

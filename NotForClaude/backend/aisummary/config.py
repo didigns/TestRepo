@@ -86,6 +86,8 @@ class Settings:
     temperature: float = 0.2              # low = factual
     similarity_threshold: float = 0.25    # below this -> "not found"
     require_citations: bool = True
+    refine_query: bool = True             # rewrite vague queries for retrieval (search only)
+    refine_temperature: float = 0.0       # deterministic rewrite
     telemetry: bool = False               # opt-in, default OFF
     # --- chat-app bots (ask the Agent from Discord / Slack) ---
     discord_bot_token: str = ""           # Discord bot token

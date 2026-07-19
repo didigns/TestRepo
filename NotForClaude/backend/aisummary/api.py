@@ -144,6 +144,12 @@ def auth(x_token: str = Header(default="")):
 # ---- schemas ---------------------------------------------------------
 class QueryReq(BaseModel):
     question: str
+    # Override query refinement for this request (None = use the configured
+    # default, settings.refine_query).
+    refine: Optional[bool] = None
+    # @-mention file scope: restrict retrieval/summary to these indexed file
+    # paths (None/empty = all files).
+    files: Optional[list] = None
 
 
 class ScanReq(BaseModel):
@@ -463,11 +469,13 @@ def pick_folder(_=Depends(auth)):
 @app.post("/query")
 def query(req: QueryReq, _=Depends(auth)):
     with _QueueGate():
-        ans = _state["engine"].query(req.question)
+        ans = _state["engine"].query(req.question, refine=req.refine, files=req.files)
     return {
         "answer": ans.text, "grounded": ans.grounded, "refused": ans.refused,
         "confidence": ans.confidence, "warnings": ans.warnings,
         "citations": [c.__dict__ for c in ans.citations],
+        "refined_query": ans.refined_query,
+        "tools": ans.tools,
     }
 
 
@@ -771,7 +779,7 @@ def query_stream(req: QueryReq, _=Depends(auth)):
                 with _QWLOCK:
                     _QWAIT["n"] -= 1
         try:
-            for ev in _state["engine"].query_stream(req.question):
+            for ev in _state["engine"].query_stream(req.question, refine=req.refine, files=req.files):
                 yield sse(ev)
         finally:
             _QGATE.release()
@@ -790,6 +798,13 @@ def kb_files(folder: str, _=Depends(auth)):
     return {"files": list_files(_state["settings"], folder)}
 
 
+@app.get("/files")
+def all_indexed_files(_=Depends(auth)):
+    """Flat list of every indexed file, for the chat @-mention picker."""
+    from .rag.preview import indexed_files
+    return {"files": indexed_files()}
+
+
 @app.get("/source/page.png")
 def source_page(path: str, page: int = 1, _=Depends(auth_q)):
     from .rag.preview import is_indexed, render_page_png
@@ -798,7 +813,20 @@ def source_page(path: str, page: int = 1, _=Depends(auth_q)):
     png = render_page_png(path, page)
     if png is None:
         raise HTTPException(404, "not a pdf")
-    return Response(content=png, media_type="image/png")
+    # Cache in the browser too: the same page URL re-renders/re-transfers nothing
+    # on repeat views within the session (source docs are read-only).
+    return Response(content=png, media_type="image/png",
+                    headers={"Cache-Control": "private, max-age=3600"})
+
+
+@app.get("/source/pagecount")
+def source_pagecount(path: str, _=Depends(auth_q)):
+    """Total page count only — cheap (cached, warmed by the page render), so the
+    pager can show 'N' immediately without waiting on highlight search."""
+    from .rag.preview import is_indexed, page_count
+    if not is_indexed(path):
+        raise HTTPException(403, "not an indexed file")
+    return {"pages": page_count(path)}
 
 
 @app.get("/source/highlights")
@@ -1014,6 +1042,7 @@ class AppendReq(BaseModel):
     role: str                       # "user" | "assistant"
     content: str
     citations: Optional[list] = None
+    tools: Optional[list] = None    # tool-call records for the "Tool called" UI
 
 
 class MoveReq(BaseModel):
@@ -1049,7 +1078,7 @@ def sessions_get(sid: str, _=Depends(auth)):
 @app.post("/sessions/{sid}/append")
 def sessions_append(sid: str, req: AppendReq, _=Depends(auth)):
     from .chat_store import append_message
-    if not append_message(sid, req.role, req.content, req.citations):
+    if not append_message(sid, req.role, req.content, req.citations, req.tools):
         raise HTTPException(404, "session not found")
     return {"ok": True}
 

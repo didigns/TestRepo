@@ -17,6 +17,11 @@ from ..config import Settings
 from ..llm import OllamaProvider
 from .vectorstore import VectorStore, Retrieved
 from .hybrid import BM25, reciprocal_rank_fusion
+from .refine import refine_query
+from .summarize import (
+    is_summarize_request, pick_file, gather_file_chunks,
+    SUMMARIZE_SYSTEM, SUMMARIZE_REFUSAL,
+)
 
 SYSTEM = (
     "당신은 사용자의 로컬 문서에 대해서만 답하는 어시스턴트입니다.\n"
@@ -30,6 +35,8 @@ SYSTEM = (
     "형식 규칙 (반드시 지킬 것):\n"
     "- 읽기 쉬운 **마크다운**으로 작성. 서두 인사말·불필요한 도입부 없이 바로 핵심.\n"
     "- 항목이 여러 개면 불릿 목록(`- `)으로, 범주가 나뉘면 굵은 소제목(`**제목**`)으로 묶기.\n"
+    "- 여러 항목의 속성 비교·수치·구분 값 등 표로 정리하면 더 명확한 내용은 마크다운 **표**로 작성하기 "
+    "(`| 열1 | 열2 |` 헤더 + `| --- | --- |` 구분선 + 데이터 행). 표 셀 안에도 필요하면 [Sn] 인용.\n"
     "- 같은 문장·같은 인용을 반복하지 말 것. 각 요점은 한 번만.\n"
     "- 간결하게. 한 요점은 1~2문장."
 )
@@ -100,6 +107,14 @@ class Answer:
     confidence: float = 0.0
     warnings: List[str] = field(default_factory=list)
     refused: bool = False
+    # The search-optimized rewrite used for retrieval (empty if refinement was
+    # off or left the question unchanged). The answer itself is always generated
+    # against the user's original question.
+    refined_query: str = ""
+    # Generic record of tools that ran this turn, for the UI's "Tool called"
+    # display: [{name, title, input:{...}, output:{...}}]. Query refinement is
+    # the first; future function-tools reuse the same shape.
+    tools: List[dict] = field(default_factory=list)
 
 
 class RagEngine:
@@ -121,6 +136,34 @@ class RagEngine:
             self._bm25_rows = rows
             self._bm25_count = n
         return self._bm25, self._bm25_rows
+
+    def _tool_calls(self, question: str, search_q: str) -> List[dict]:
+        """Structured record of tools that ran this turn, for the UI's generic
+        'Tool called' display. Currently just query refinement (only when it
+        actually changed the query). Future function-tools append here too."""
+        tools: List[dict] = []
+        if search_q and search_q != question:
+            tools.append({
+                "name": "refine_query",
+                "title": "질의 다듬기",
+                "input": {"질문": question},
+                "output": {"검색 질의": search_q},
+            })
+        return tools
+
+    def _refine(self, question: str, override: Optional[bool] = None) -> str:
+        """Rewrite the question for retrieval. Returns the search query to use;
+        the original question is what the answer is generated against.
+
+        Enabled by settings.refine_query (default on) unless `override` is given.
+        Always safe — refine_query falls back to the original on any failure."""
+        on = getattr(self.settings, "refine_query", True) if override is None else override
+        if not on:
+            return question
+        return refine_query(
+            self.provider, question,
+            temperature=getattr(self.settings, "refine_temperature", 0.0),
+        )
 
     def _retrieve(self, question: str):
         """Hybrid retrieval. Returns (ranked Retrieved list, best_vec_sim)."""
@@ -176,45 +219,193 @@ class RagEngine:
             return any(sp == a or sp.startswith(a + os.sep) for a in allow)
         return [h for h in hits if ok(h)]
 
-    def query(self, question: str, persona: Optional[str] = None,
-              folders: Optional[list] = None) -> Answer:
-        prof = self.settings.profile()
-        hits, best = self._retrieve(question)
+    # ---- document summarization ------------------------------------------
+
+    def _summary_target(self, question, folders, refine, files=None):
+        """Resolve what to summarize. Priority: explicit @-mention files ->
+        named file in the text -> retrieved topic set. Returns (hits, best_sim,
+        scope_label)."""
+        rows = self.store.all_rows()
+        if files:                                   # explicit @-mention targets
+            hits = []
+            for fp in files:
+                hits += gather_file_chunks(rows, fp)
+            names = sorted({h.filename for h in hits})
+            label = names[0] if len(names) == 1 else f"파일 {len(names)}개"
+            return hits, 1.0, label
+        src = pick_file(rows, question)
+        if src:
+            hits = self._scope_hits(gather_file_chunks(rows, src), folders)
+            scope = hits[0].filename if hits else src
+            return hits, 1.0, scope
+        search_q = self._refine(question, refine)
+        hits, best = self._retrieve(search_q)
         hits = self._scope_hits(hits, folders)
+        names = sorted({h.filename for h in hits})
+        scope = names[0] if len(names) == 1 else f"관련 문서 {len(names)}개"
+        return hits, best, scope
 
-        # ---- confidence gate: weak match -> general mode (or refuse) ----
-        if not hits or best < self.settings.similarity_threshold:
-            if getattr(self.settings, "general_mode", True):
-                return self._general_answer(question, best, persona)
-            return Answer(text=REFUSAL, grounded=True, confidence=best,
-                          refused=True,
-                          warnings=["검색 신뢰도가 임계값 미만 → 답변 거부"])
+    @staticmethod
+    def _summary_tools(scope, n):
+        return [{
+            "name": "summarize_document", "title": "문서 요약",
+            "input": {"대상": scope}, "output": {"요약 범위": f"청크 {n}개"},
+        }]
 
-        # ---- build labeled context ----
+    def _summarize(self, question, persona=None, folders=None, refine=None, files=None) -> Answer:
+        prof = self.settings.profile()
+        hits, best, scope = self._summary_target(question, folders, refine, files)
+        tools = self._summary_tools(scope, len(hits))
+        if not hits:
+            return Answer(text=SUMMARIZE_REFUSAL, grounded=True, confidence=best,
+                          refused=True, tools=tools)
         context, labeled = self._pack(hits, prof.context_tokens)
         prompt = (f"# 출처\n{context}\n\n"
-                  f"# 질문\n{question}\n\n"
+                  f"# 작업\n위 문서 내용을 구조화해 요약하세요 (각 요점에 [Sn] 인용).")
+        raw = self.provider.generate(
+            prompt, system=_with_persona(SUMMARIZE_SYSTEM, persona),
+            temperature=self.settings.temperature)
+        ans = self._verify(raw, labeled, best)
+        ans.tools = tools
+        return ans
+
+    def _summarize_stream(self, question, persona=None, folders=None, refine=None, files=None):
+        prof = self.settings.profile()
+        hits, best, scope = self._summary_target(question, folders, refine, files)
+        tools = self._summary_tools(scope, len(hits))
+        if not hits:
+            yield {"type": "meta", "refused": True, "confidence": round(best, 4), "tools": tools}
+            yield {"type": "token", "text": SUMMARIZE_REFUSAL}
+            yield {"type": "done", "grounded": True, "refused": True,
+                   "citations": [], "warnings": []}
+            return
+        context, labeled = self._pack(hits, prof.context_tokens)
+        prompt = (f"# 출처\n{context}\n\n"
+                  f"# 작업\n위 문서 내용을 구조화해 요약하세요 (각 요점에 [Sn] 인용).")
+        yield {"type": "meta", "refused": False, "confidence": round(best, 4), "tools": tools}
+        gsys = _with_persona(SUMMARIZE_SYSTEM, persona)
+        buf = []
+        try:
+            for tok in self.provider.generate_stream(prompt, system=gsys):
+                buf.append(tok)
+                yield {"type": "token", "text": tok}
+        except Exception:  # provider without streaming -> one-shot
+            raw = self.provider.generate(prompt, system=gsys)
+            buf = [raw]
+            yield {"type": "token", "text": raw}
+        ans = self._verify("".join(buf), labeled, best)
+        yield {"type": "done", "grounded": ans.grounded, "refused": ans.refused,
+               "citations": [c.__dict__ for c in ans.citations], "warnings": ans.warnings}
+
+    # ---- QA retrieval (with @-mention file scoping) ----------------------
+
+    def _strip_mentions(self, question, files):
+        """Drop "@<filename>" tokens (the scope rides in `files`), so the real
+        ask drives ranking + the answer prompt instead of the file name."""
+        import os
+        q = question or ""
+        for fp in files or []:
+            q = q.replace("@" + os.path.basename(fp), " ")
+        q = " ".join(q.split()).strip()
+        return q or question
+
+    def _files_hits(self, files, query):
+        """Chunks to ground on when specific files are @-mentioned: use those
+        files directly (NOT global top-k + post-filter, which can drop an
+        explicitly-named file whose chunks didn't rank). Small docs use every
+        chunk; large docs are ranked by BM25 relevance so the pertinent parts
+        survive the context budget."""
+        rows = self.store.all_rows()
+        chunks = []
+        for fp in files or []:
+            chunks += gather_file_chunks(rows, fp, max_chunks=10 ** 9)
+        if not chunks or len(chunks) <= 12 or not (query or "").strip():
+            return chunks
+        from .hybrid import BM25, tokenize
+        bm = BM25([tokenize(c.text) for c in chunks])
+        top = bm.top(query, n=min(len(chunks), 60))
+        return [chunks[i] for i, _ in top] if top else chunks
+
+    def _qa_context(self, question, folders, refine, files):
+        """Resolve (hits, best, shown_refined, tools, prompt_question). With
+        @-mention files, scope to them and skip the (now-misleading) refine."""
+        if files:
+            import os
+            pq = self._strip_mentions(question, files)
+            hits = self._files_hits(files, pq)
+            names = [os.path.basename(f) for f in files]
+            tools = [{"name": "file_scope", "title": "파일 지정",
+                      "input": {"파일": ", ".join(names)},
+                      "output": {"근거 청크": f"{len(hits)}개"}}]
+            return hits, (1.0 if hits else 0.0), "", tools, pq
+        search_q = self._refine(question, refine)
+        shown = search_q if search_q != question else ""
+        tools = self._tool_calls(question, search_q)
+        hits, best = self._retrieve(search_q)
+        hits = self._scope_hits(hits, folders)
+        return hits, best, shown, tools, question
+
+    def query(self, question: str, persona: Optional[str] = None,
+              folders: Optional[list] = None, refine: Optional[bool] = None,
+              files: Optional[list] = None) -> Answer:
+        if is_summarize_request(question):
+            return self._summarize(question, persona, folders, refine, files)
+        prof = self.settings.profile()
+        hits, best, shown, tools, pq = self._qa_context(question, folders, refine, files)
+
+        # An @-mentioned file with no indexed content -> a clear message
+        # (not the model's "I can't see the file" hallucination).
+        if files and not hits:
+            return Answer(text="지정하신 파일에서 인덱싱된 내용을 찾을 수 없습니다.",
+                          grounded=True, confidence=0.0, refused=True, tools=tools)
+        # ---- confidence gate: open (non-file) search only ----
+        if not files and (not hits or best < self.settings.similarity_threshold):
+            if getattr(self.settings, "general_mode", True):
+                ans = self._general_answer(question, best, persona)
+                ans.refined_query = shown; ans.tools = tools
+                return ans
+            return Answer(text=REFUSAL, grounded=True, confidence=best,
+                          refused=True, refined_query=shown, tools=tools,
+                          warnings=["검색 신뢰도가 임계값 미만 → 답변 거부"])
+
+        context, labeled = self._pack(hits, prof.context_tokens)
+        prompt = (f"# 출처\n{context}\n\n"
+                  f"# 질문\n{pq}\n\n"
                   f"# 답변 (각 사실에 [Sn] 인용, 없으면 거부 문구)")
         raw = self.provider.generate(prompt, system=_with_persona(SYSTEM, persona),
                                      temperature=self.settings.temperature)
 
-        return self._verify(raw, labeled, best)
+        ans = self._verify(raw, labeled, best)
+        ans.refined_query = shown; ans.tools = tools
+        return ans
 
     def query_stream(self, question: str, persona: Optional[str] = None,
-                     folders: Optional[list] = None):
+                     folders: Optional[list] = None, refine: Optional[bool] = None,
+                     files: Optional[list] = None):
         """Streaming variant. Yields dict events:
-        {type:'meta', refused, confidence} → {type:'token', text} … →
-        {type:'done', grounded, refused, citations, warnings}."""
+        {type:'meta', refused, confidence, refined_query} → {type:'token', text}
+        … → {type:'done', grounded, refused, citations, warnings}."""
+        if is_summarize_request(question):
+            yield from self._summarize_stream(question, persona, folders, refine, files)
+            return
         prof = self.settings.profile()
-        hits, best = self._retrieve(question)
-        hits = self._scope_hits(hits, folders)
+        hits, best, shown, tools, pq = self._qa_context(question, folders, refine, files)
 
-        if not hits or best < self.settings.similarity_threshold:
+        if files and not hits:              # named file with no indexed content
+            yield {"type": "meta", "refused": True, "confidence": 0.0,
+                   "refined_query": "", "tools": tools}
+            yield {"type": "token", "text": "지정하신 파일에서 인덱싱된 내용을 찾을 수 없습니다."}
+            yield {"type": "done", "grounded": True, "refused": True,
+                   "citations": [], "warnings": []}
+            return
+
+        if not files and (not hits or best < self.settings.similarity_threshold):
             # Weak match -> general mode (natural free-form answer), unless the
             # user disabled it, in which case keep the original hard refusal.
             if getattr(self.settings, "general_mode", True):
                 gtemp = getattr(self.settings, "general_temperature", 0.6)
-                yield {"type": "meta", "refused": False, "confidence": round(best, 4)}
+                yield {"type": "meta", "refused": False, "confidence": round(best, 4),
+                       "refined_query": shown, "tools": tools}
                 gsys = _with_persona(GENERAL_SYSTEM, persona)
                 buf = []
                 try:
@@ -230,16 +421,18 @@ class RagEngine:
                        "citations": [], "warnings": []}
                 return
 
-            yield {"type": "meta", "refused": True, "confidence": round(best, 4)}
+            yield {"type": "meta", "refused": True, "confidence": round(best, 4),
+                   "refined_query": shown, "tools": tools}
             yield {"type": "token", "text": REFUSAL}
             yield {"type": "done", "grounded": True, "refused": True,
                    "citations": [], "warnings": ["검색 신뢰도가 임계값 미만"]}
             return
 
         context, labeled = self._pack(hits, prof.context_tokens)
-        prompt = (f"# 출처\n{context}\n\n# 질문\n{question}\n\n"
+        prompt = (f"# 출처\n{context}\n\n# 질문\n{pq}\n\n"
                   f"# 답변 (각 사실에 [Sn] 인용, 없으면 거부 문구)")
-        yield {"type": "meta", "refused": False, "confidence": round(best, 4)}
+        yield {"type": "meta", "refused": False, "confidence": round(best, 4),
+               "refined_query": shown, "tools": tools}
 
         gsys = _with_persona(SYSTEM, persona)
         buf = []

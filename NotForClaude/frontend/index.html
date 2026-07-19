@@ -111,11 +111,27 @@
   .av.ai{background:var(--coral);color:#fff;border-radius:7px;}
   .msg{font-size:13.5px;line-height:1.72;padding-top:2px;}
   .grounded{display:inline-flex;align-items:center;gap:4px;font-size:9px;padding:2px 7px;border-radius:5px;background:var(--ok-bg);color:var(--ok);margin-bottom:7px;}
-  .cite{display:inline-flex;align-items:center;gap:3px;border:1px solid var(--muted);color:var(--accent);background:var(--panel);font-size:10.5px;line-height:1.4;padding:0 7px 0 5px;border-radius:11px;vertical-align:1px;cursor:pointer;margin:0 2px;white-space:nowrap;max-width:210px;overflow:hidden;font-weight:500;}
-  .cite:hover{border-color:var(--accent);background:var(--accent-bg);}
-  .cite .ficon{width:12px;height:12px;vertical-align:-1px;}
-  .cite .cn{overflow:hidden;text-overflow:ellipsis;}
+  /* Inline citation — a small superscript number (filename lives in the tooltip
+     + the sources panel), so it never breaks the reading flow. */
+  .cite{font-size:9.5px;font-weight:700;color:var(--accent);background:var(--accent-bg);border-radius:4px;padding:1px 4px;margin:0 1px;cursor:pointer;line-height:1;white-space:nowrap;text-decoration:none;}
+  .cite:hover{background:var(--accent);color:#fff;}
   .refused{color:var(--text2);}
+  /* Tool-call line — minimal & borderless (Claude-Code style): a dim disclosure
+     line, NOT a card. Click to expand the I/O, shown indented under a hairline.
+     width:fit-content so it never stretches with the answer. */
+  .toolcall{width:fit-content;max-width:100%;margin:3px 0 10px;}
+  .toolcall>summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px;padding:1px 0;font-size:12px;color:var(--muted);user-select:none;}
+  .toolcall>summary::-webkit-details-marker{display:none;}
+  .toolcall>summary:hover{color:var(--text2);}
+  .toolcall>summary:hover .tc-name{color:var(--text);}
+  .toolcall .tc-chev{width:11px;height:11px;flex:0 0 auto;color:var(--muted);transition:transform .18s ease;}
+  .toolcall[open] .tc-chev{transform:rotate(90deg);}
+  .toolcall .tc-name{color:var(--text2);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;}
+  .toolcall .tc-title{color:var(--muted);}
+  .toolcall .tc-body{margin:6px 0 0;padding-left:11px;border-left:1.5px solid var(--border);}
+  .toolcall .tc-io{margin-top:6px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;line-height:1.55;color:var(--text2);white-space:pre-wrap;word-break:break-word;}
+  .toolcall .tc-io:first-child{margin-top:0;}
+  .toolcall .tc-lbl{display:block;color:var(--muted);font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;}
   .ansmd{font-size:13.5px;line-height:1.72;}
   .ansmd>*:first-child{margin-top:0;} .ansmd>*:last-child{margin-bottom:0;}
   .ansmd h1,.ansmd h2,.ansmd h3,.ansmd h4{font-size:13.5px;font-weight:600;margin:.9em 0 .35em;color:var(--text);}
@@ -176,21 +192,38 @@
   .coral{color:var(--coral,#e2603a);}
   .caret{display:inline-block;width:6px;height:14px;background:var(--accent);vertical-align:-2px;margin-left:2px;animation:blink 1s step-start infinite;}
   @keyframes blink{50%{opacity:0;}}
-  .composer{border-top:.5px solid var(--border);padding:12px 22px;}
+  .composer{border-top:.5px solid var(--border);padding:12px 22px;position:relative;}
   .cbox{display:flex;align-items:center;gap:9px;border:.5px solid var(--border);border-radius:22px;padding:8px 8px 8px 15px;background:var(--panel);max-width:760px;margin:0 auto;}
   .cbox input{flex:1;border:0;outline:0;background:transparent;color:var(--text);font-size:13px;}
+  /* @-mention file picker (drops up above the composer) */
+  .mpop{position:absolute;left:50%;transform:translateX(-50%);bottom:100%;margin-bottom:8px;width:min(760px,calc(100% - 44px));max-height:264px;overflow-y:auto;background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:0 14px 38px rgba(0,0,0,.3);padding:5px;z-index:60;}
+  .mpop-row{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;font-size:12.5px;color:var(--text2);}
+  .mpop-row.sel,.mpop-row:hover{background:var(--panel2);color:var(--text);}
+  .mpop-row .ficon{width:14px;height:14px;flex:0 0 auto;}
+  .mpop-row .mp-nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .mpop-empty{padding:9px 10px;color:var(--muted);font-size:12px;}
   .modelchip{font-size:9px;color:var(--text2);background:var(--panel2);padding:3px 7px;border-radius:6px;white-space:nowrap;}
   .send{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;border:0;cursor:pointer;font-size:14px;}
   .send:disabled{opacity:.4;}
-  .src-h{display:flex;align-items:center;justify-content:space-between;padding:12px 13px;border-bottom:.5px solid var(--border);}
-  .src-title{font-size:11px;color:var(--coral);font-weight:600;}
+  /* Source preview — centered modal over a blurred backdrop (replaces the old
+     cramped right panel; readable on small laptop screens). */
+  .src-modal{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:24px;}
+  .src-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.42);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);animation:fadeIn .12s ease;}
+  .src-card{position:relative;z-index:1;width:min(940px,95vw);max-height:90vh;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--border);border-radius:15px;box-shadow:0 24px 70px rgba(0,0,0,.38);overflow:hidden;animation:popIn .14s ease;}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  @keyframes popIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
+  .src-h{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:.5px solid var(--border);}
+  .src-title{font-size:13px;color:var(--coral);font-weight:600;}
   .icobtn{background:transparent;border:0;color:var(--muted);cursor:pointer;font-size:14px;}
-  .src-body{padding:12px 13px;overflow-y:auto;flex:1;}
-  .doc-meta{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--text2);margin-bottom:9px;}
+  .src-body{padding:16px 20px;overflow-y:auto;flex:1;}
+  .doc-meta{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);margin-bottom:11px;}
   .pageview{position:relative;border:.5px solid var(--border);border-radius:8px;overflow:hidden;background:#fff;}
   .pageview img{display:block;width:100%;}
+  .pgload{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:9px;color:var(--text2);font-size:12.5px;background:var(--panel);z-index:2;min-height:200px;}
+  .pgload .spin{width:17px;height:17px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:pgspin .7s linear infinite;}
+  @keyframes pgspin{to{transform:rotate(360deg)}}
   .hl{position:absolute;background:rgba(226,96,48,.28);border:1px solid rgba(226,96,48,.6);border-radius:2px;pointer-events:none;}
-  .txtview{background:var(--panel);border:.5px solid var(--border);border-radius:8px;padding:11px;font-size:11px;color:var(--text2);line-height:1.75;white-space:pre-wrap;}
+  .txtview{background:var(--panel);border:.5px solid var(--border);border-radius:8px;padding:14px 16px;font-size:13px;color:var(--text2);line-height:1.8;white-space:pre-wrap;}
   .txtview mark{background:var(--coral-bg);color:var(--coral);padding:0 2px;}
   .txtview.md{white-space:normal;}
   .txtview.md h1,.txtview.md h2,.txtview.md h3{margin:.6em 0 .3em;line-height:1.3;color:var(--text);}
@@ -202,7 +235,7 @@
   .txtview.md a{color:var(--accent);} .txtview.md blockquote{border-left:2px solid var(--border);margin:.4em 0;padding-left:8px;color:var(--muted);}
   .txtview.md table{border-collapse:collapse;} .txtview.md td,.txtview.md th{border:.5px solid var(--border);padding:2px 6px;}
   .txtview.md img{max-width:100%;}
-  .pager{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:10px;font-size:11px;color:var(--text2);}
+  .pager{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:12px;font-size:12.5px;color:var(--text2);}
   .pager button{background:transparent;border:.5px solid var(--border);color:var(--text2);border-radius:6px;cursor:pointer;padding:2px 8px;}
   .empty{color:var(--muted);font-size:11px;text-align:center;padding:40px 12px;line-height:1.6;}
   .modal{position:absolute;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;z-index:20;}
@@ -486,8 +519,9 @@
         <div class="empty">내 문서에 대해 무엇이든 물어보세요.<br>답변은 항상 내 파일을 근거로 인용과 함께 제공됩니다.</div>
       </div>
       <div class="composer">
+        <div class="mpop hidden" id="mpop"></div>
         <div class="cbox">
-          <input id="q" placeholder="내 문서에 대해 질문…" onkeydown="if(event.key==='Enter')ask()" />
+          <input id="q" placeholder="내 문서에 대해 질문…  (@로 파일 지정)" oninput="mentionInput()" onkeydown="qKeydown(event)" />
           <span class="modelchip" id="modelchip">로컬</span>
           <button class="send" id="sendbtn" onclick="ask()">↑</button>
         </div>
@@ -543,13 +577,16 @@
 
   </div>
 
-  <!-- RIGHT: source preview -->
-  <div class="col src hidden" id="srcpanel">
-    <div class="src-h">
-      <span class="src-title">출처 미리보기</span>
-      <button class="icobtn" onclick="closeSource()">✕</button>
+  <!-- source preview — centered modal over a blurred backdrop -->
+  <div class="src-modal hidden" id="srcpanel">
+    <div class="src-backdrop" onclick="closeSource()"></div>
+    <div class="src-card">
+      <div class="src-h">
+        <span class="src-title">📄 출처 미리보기</span>
+        <button class="icobtn" onclick="closeSource()">✕</button>
+      </div>
+      <div class="src-body" id="srcbody"></div>
     </div>
-    <div class="src-body" id="srcbody"></div>
   </div>
 
 </div>
@@ -838,6 +875,8 @@ let curSession=null;      // active session id (null = unsaved new chat)
 let answeringSession=null;// session id whose answer is currently streaming
 let answerBody=null;      // live .msg node the stream renders into (re-attachable on nav)
 let answerText='';        // answer tokens accumulated so far
+let answerToolHTML='';    // rendered tool-call block prepended above the answer; re-injected on rebuild
+let answerTools=[];       // structured tool records (persisted with the message so they survive session switches)
 let folderOpen={};        // folder_id -> expanded?
 let citeSets=[];          // per-saved-answer citation arrays (for reloaded convos)
 let _dragSid=null;
@@ -932,7 +971,7 @@ function renderConversation(rec){
     if(m.role==='user'){ addTurn('me',esc(m.content)); }
     else{
       const setId=citeSets.push(m.citations||[])-1;
-      addTurn('ai',`<div class="ansmd">${renderAnswerSet(m.content||'',setId)}</div>`);
+      addTurn('ai',toolBlockHTML(m.tools)+`<div class="ansmd">${renderAnswerSet(m.content||'',setId)}</div>`);
       (m.citations||[]).forEach(c=>{ refFiles[c.filename]={path:c.source_path,page:c.page,snippet:c.snippet}; });
     }
   });
@@ -949,10 +988,8 @@ function renderConversation(rec){
 // render a saved answer's markdown with citation chips bound to that answer's own citation set
 function chipFor(setId,n){
   const set=citeSets[setId]||[]; const c=set[n-1];
-  if(!c) return `<span class="cite">${n}</span>`;
-  const nm=c.filename&&c.filename.length>24 ? c.filename.slice(0,22)+'…' : (c.filename||'');
-  return `<span class="cite" onclick="openSetSource(${setId},${n-1})" title="${esc(c.source_path||'')} · p.${c.page||1}">`
-    +`${fileIcon(c.filename||'')}<span class="cn">${esc(nm)}</span></span>`;
+  if(!c) return `<sup class="cite">${n}</sup>`;
+  return `<sup class="cite" onclick="openSetSource(${setId},${n-1})" title="${esc(c.filename||'')} · p.${c.page||1}">${n}</sup>`;
 }
 function openSetSource(setId,i){ const c=(citeSets[setId]||[])[i]; if(c) showSource(c); }
 function renderAnswerSet(text,setId){
@@ -1024,6 +1061,18 @@ function renderRefs(){
       <span style="width:14px;height:14px;border-radius:4px;background:var(--accent-bg);color:var(--accent);font-size:8px;display:inline-flex;align-items:center;justify-content:center;">${i+1}</span>
       <span class="nm" style="color:var(--text)">${esc(fn)}</span></div>`;
   }).join('');
+  prefetchRefs();
+}
+// Warm the server/browser render cache for cited PDF pages while the user reads,
+// so clicking a citation opens the preview instantly. Cited pages only, capped.
+function prefetchRefs(){
+  let n=0;
+  for(const fn of Object.keys(refFiles)){
+    const r=refFiles[fn]; const p=(r&&r.path)||'';
+    if(!/\.pdf$/i.test(p)) continue;
+    new Image().src=`/source/page.png?path=${encodeURIComponent(p)}&page=${(r&&r.page)||1}&token=${encodeURIComponent(TOKEN)}`;
+    if(++n>=8) break;
+  }
 }
 
 async function addFolder(){
@@ -1051,10 +1100,8 @@ async function addFolder(){
 let citeStore=[];      // citations of the latest answer
 function chip(n){
   const c=citeStore[n-1];
-  if(!c) return `<span class="cite" onclick="openSource(${n-1})">${n}</span>`;  // during streaming
-  const nm=c.filename.length>24 ? c.filename.slice(0,22)+'…' : c.filename;
-  return `<span class="cite" onclick="openSource(${n-1})" title="${esc(c.source_path)} · p.${c.page}">`
-    +`${fileIcon(c.filename)}<span class="cn">${esc(nm)}</span></span>`;
+  if(!c) return `<sup class="cite" onclick="openSource(${n-1})">${n}</sup>`;  // during streaming
+  return `<sup class="cite" onclick="openSource(${n-1})" title="${esc(c.filename||'')} · p.${c.page}">${n}</sup>`;
 }
 // convert ANY citation marker the model emits -> filename chip:
 // [S1] · [1] · 【1】 · circled ①..⑳
@@ -1085,13 +1132,71 @@ function renderAnswer(text){
   return html.replace(/%%C(\d+)%%/g,(m,i)=>chip(nums[+i]));
 }
 
+// ---- @-mention file tagging ----
+let allFiles=null;         // cached [{name,path}] of indexed files
+let pendingMentions=[];    // file paths tagged for the next send
+let mMatches=[], mSel=0;
+async function loadAllFiles(){
+  if(allFiles) return allFiles;
+  try{ const r=await api('/files'); allFiles=(await r.json()).files||[]; }catch(e){ allFiles=[]; }
+  return allFiles;
+}
+function atToken(inp){   // the "@word" the caret is currently inside, or null
+  const pos=inp.selectionStart, upto=inp.value.slice(0,pos);
+  const at=upto.lastIndexOf('@');
+  if(at<0) return null;
+  if(at>0 && !/\s/.test(upto[at-1])) return null;   // must start or follow whitespace
+  const token=upto.slice(at+1);
+  if(/\s/.test(token)) return null;                 // no space inside the token
+  return {start:at, token};
+}
+async function mentionInput(){
+  const t=atToken(el('q'));
+  if(!t){ hideMentions(); return; }
+  await loadAllFiles();
+  const q=t.token.toLowerCase();
+  mMatches=allFiles.filter(f=>f.name.toLowerCase().includes(q)).slice(0,8);
+  mSel=0;
+  if(!mMatches.length){ el('mpop').innerHTML='<div class="mpop-empty">일치하는 파일 없음</div>'; el('mpop').classList.remove('hidden'); return; }
+  renderMentions();
+}
+function renderMentions(){
+  el('mpop').innerHTML=mMatches.map((f,i)=>
+    `<div class="mpop-row ${i===mSel?'sel':''}" onmousedown="event.preventDefault();pickMention(${i})">${fileIcon(f.name)}<span class="mp-nm">${esc(f.name)}</span></div>`).join('');
+  el('mpop').classList.remove('hidden');
+}
+function hideMentions(){ el('mpop').classList.add('hidden'); mMatches=[]; }
+function pickMention(i){
+  const f=mMatches[i]; if(!f) return;
+  const inp=el('q'), t=atToken(inp); if(!t) return;
+  const ins='@'+f.name+' ';
+  const before=inp.value.slice(0,t.start), after=inp.value.slice(inp.selectionStart);
+  inp.value=before+ins+after;
+  const pos=(before+ins).length; inp.setSelectionRange(pos,pos);
+  if(!pendingMentions.includes(f.path)) pendingMentions.push(f.path);
+  hideMentions(); inp.focus();
+}
+function qKeydown(e){
+  const open=!el('mpop').classList.contains('hidden') && mMatches.length;
+  if(open){
+    if(e.key==='ArrowDown'){ e.preventDefault(); mSel=(mSel+1)%mMatches.length; renderMentions(); return; }
+    if(e.key==='ArrowUp'){ e.preventDefault(); mSel=(mSel-1+mMatches.length)%mMatches.length; renderMentions(); return; }
+    if(e.key==='Enter'||e.key==='Tab'){ e.preventDefault(); pickMention(mSel); return; }
+    if(e.key==='Escape'){ e.preventDefault(); hideMentions(); return; }
+  }
+  if(e.key==='Enter') ask();
+}
+
 async function ask(){
   const q=el('q').value.trim(); if(!q) return;
+  // Resolve @-mentions still present in the text -> indexed file paths (scope).
+  const files=pendingMentions.filter(p=>{ const f=(allFiles||[]).find(x=>x.path===p); return f && q.includes('@'+f.name); });
+  pendingMentions=[]; hideMentions();
   el('q').value=''; el('sendbtn').disabled=true;
   if(el('thread').querySelector('.empty')) el('thread').innerHTML='';
   addTurn('me',esc(q));
   const ai=addTurn('ai','<span class="caret"></span>');
-  answerBody=ai.querySelector('.msg'); answerText='';   // module-level so nav can re-attach
+  answerBody=ai.querySelector('.msg'); answerText=''; answerToolHTML=''; answerTools=[];   // module-level so nav can re-attach
   // ensure a saved session exists (title from the first question) and show it
   // in the list IMMEDIATELY — before the answer streams — so switching tabs
   // mid-answer doesn't hide the new session.
@@ -1117,7 +1222,7 @@ async function ask(){
   answeringSession=askSession;
   let doneEv=null, errored=false;
   try{
-    const res=await api('/query/stream',{method:'POST',body:JSON.stringify({question:q})});
+    const res=await api('/query/stream',{method:'POST',body:JSON.stringify({question:q, files})});
     const reader=res.body.getReader(); const dec=new TextDecoder(); let buf='';
     while(true){
       const {done,value}=await reader.read(); if(done) break;
@@ -1130,40 +1235,68 @@ async function ask(){
         // module-level: navigating back to this session re-points it at the
         // freshly-rendered turn, so streaming resumes there seamlessly.
         if(ev.type==='queued'){ if(answerBody && answerBody.isConnected) answerBody.innerHTML='<span class="txt" style="color:var(--text2)">대기 중… 다른 작업이 끝나면 시작합니다'+(ev.waiting>1?(' ('+ev.waiting+'개 대기)'):'')+'</span><span class="caret"></span>'; }
-        else if(ev.type==='meta'){ if(!ev.refused && answerBody && answerBody.isConnected) answerBody.innerHTML='<span class="txt"></span><span class="caret"></span>'; }
+        else if(ev.type==='meta'){ answerTools=ev.tools||[]; answerToolHTML=toolBlockHTML(answerTools); if(!ev.refused && answerBody && answerBody.isConnected) answerBody.innerHTML=answerToolHTML+'<div class="txt ansmd"></div><span class="caret"></span>'; }
         else if(ev.type==='token'){ answerText+=ev.text; if(answerBody && answerBody.isConnected) renderStream(answerBody,answerText); }
         else if(ev.type==='done'){ doneEv=ev; if(answerBody && answerBody.isConnected) finishAnswer(answerBody,answerText,ev); }
       }
     }
   }catch(e){ errored=true; if(answerBody && answerBody.isConnected) answerBody.innerHTML='<span class="refused">오류: '+esc(e.message)+'</span>'; }
   const full=answerText;
+  const toolsUsed=answerTools;                            // persist with the message (survives session switch)
   const shown=!!(answerBody && answerBody.isConnected);   // final answer already on screen?
-  answeringSession=null; answerBody=null; answerText='';
+  answeringSession=null; answerBody=null; answerText=''; answerToolHTML=''; answerTools=[];
   el('sendbtn').disabled=false;
   // persist the answer to the pinned session (serialized to avoid file races)
   if(askSession){
     try{ await api('/sessions/'+encodeURIComponent(askSession)+'/append',
       {method:'POST',body:JSON.stringify({role:'assistant',
         content:errored?'(오류로 응답 없음)':full,
-        citations:(doneEv&&doneEv.citations)||[]})}); }catch(e){}
+        citations:(doneEv&&doneEv.citations)||[],
+        tools:toolsUsed})}); }catch(e){}
     loadSessions();
     // viewing this session but the finished answer isn't on screen -> reload
     if(curSession===askSession && !shown){ openSession(askSession); }
   }
 }
+// Generic tool-call cards (Claude/ChatGPT style). Renders any tool the backend
+// reports — [{name, title, input:{..}, output:{..}}] — collapsed by default;
+// click the row to see the I/O. Folds via native <details>.
+const TC_CHEV='<svg class="tc-chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4"/></svg>';
+function tcLines(obj){
+  if(!obj) return '';
+  return Object.keys(obj).map(k=>{ let v=obj[k]; if(v&&typeof v==='object') v=JSON.stringify(v);
+    return esc(k)+': '+esc(v); }).join('\n');
+}
+function tcIO(label,obj){ const t=tcLines(obj); return t?'<div class="tc-io"><span class="tc-lbl">'+label+'</span>'+t+'</div>':''; }
+function toolBlockHTML(tools){
+  if(!tools||!tools.length) return '';
+  return tools.map(t=>{
+    const io=tcIO('입력',t.input)+tcIO('출력',t.output);
+    return '<details class="toolcall">'
+      +'<summary>'+TC_CHEV
+      +'<span class="tc-name">'+esc(t.name||'tool')+'</span>'
+      +(t.title?'<span class="tc-title">'+esc(t.title)+'</span>':'')
+      +'</summary>'
+      +'<div class="tc-body">'+(io||'<div class="tc-io">(세부 정보 없음)</div>')+'</div>'
+      +'</details>';
+  }).join('');
+}
 function renderStream(body,full){
   let t=body.querySelector('.txt');
-  if(!t){ body.innerHTML='<div class="txt ansmd"></div>'; t=body.querySelector('.txt'); }
+  // Rebuild only when the text node is missing (first token / re-attach on nav);
+  // re-inject the tool block so it survives, and leave it alone otherwise so a
+  // user's collapse state persists during streaming.
+  if(!t){ body.innerHTML=answerToolHTML+'<div class="txt ansmd"></div>'; t=body.querySelector('.txt'); }
   t.innerHTML=renderAnswer(full)+'<span class="caret"></span>';
 }
 function finishAnswer(body,full,ev){
   citeStore=ev.citations||[];
   const warn=(ev.warnings||[]).map(w=>`<div style="font-size:10px;color:#b45309;margin-top:4px;">⚠ ${esc(w)}</div>`).join('');
   const inner=ev.refused?`<div class="refused">${esc(full)}</div>`:`<div class="ansmd">${renderAnswer(full)}</div>`;
-  body.innerHTML=inner+warn;
+  body.innerHTML=answerToolHTML+inner+warn;
   citeStore.forEach(c=>{ refFiles[c.filename]={path:c.source_path,page:c.page,snippet:c.snippet}; });
   renderRefs();
-  if(citeStore.length) openSource(0);
+  // No auto-open: the preview modal opens only when a citation/reference is clicked.
 }
 function addTurnTo(container,who,html){
   const d=document.createElement('div'); d.className='turn';
@@ -1174,45 +1307,70 @@ function addTurnTo(container,who,html){
 function addTurn(who,html){ return addTurnTo(el('thread'),who,html); }
 
 // ---- source preview ----
-let curSrc=null;
+let curSrc=null, _srcSeq=0;
 function openSourceByRef(fn){
-  const idx=citeStore.findIndex(c=>c.filename===fn);
-  if(idx>=0) return openSource(idx);
+  // Use the reference's own path/page directly — matching by filename in
+  // citeStore cross-wires two different PDFs that happen to share a filename.
   const r=refFiles[fn]; if(r) showSource({source_path:r.path,filename:fn,page:r.page,snippet:r.snippet});
 }
 function openSource(i){ const c=citeStore[i]; if(c) showSource(c); }
 async function showSource(c){
   el('srcpanel').classList.remove('hidden');
   const isPdf=(c.source_path||'').toLowerCase().endsWith('.pdf');
-  curSrc={path:c.source_path,filename:c.filename,page:c.page||1,citedPage:c.page||1,q:c.snippet||'',isPdf,pages:1};
+  curSrc={path:c.source_path,filename:c.filename,page:c.page||1,citedPage:c.page||1,q:c.snippet||'',isPdf,pages:0};
   renderSource();
+  if(isPdf) fetchPageCount(curSrc);   // total pages: one fast request, shown ASAP (independent of highlights)
+}
+function srcPageUrl(path,page){ return `/source/page.png?path=${encodeURIComponent(path)}&page=${page}&token=${encodeURIComponent(TOKEN)}`; }
+async function fetchPageCount(s){
+  try{
+    const r=await api(`/source/pagecount?path=${encodeURIComponent(s.path)}&token=${encodeURIComponent(TOKEN)}`);
+    const j=await r.json(); s.pages=j.pages||1;
+    if(curSrc===s){ const pc=el('pc'); if(pc) pc.textContent=s.pages; }   // fill the pager the moment it arrives
+  }catch(e){}
 }
 async function renderSource(){
   const s=curSrc; if(!s) return;
+  const seq=++_srcSeq;                       // any older in-flight render is now stale
   const meta=`<div class="doc-meta">${fileIcon(s.filename)}
     <span style="color:var(--text);font-weight:600">${esc(s.filename)}</span><span>· p.${s.page}</span></div>`;
   if(s.isPdf){
-    const img=`/source/page.png?path=${encodeURIComponent(s.path)}&page=${s.page}&token=${encodeURIComponent(TOKEN)}`;
-    el('srcbody').innerHTML=meta+`<div class="pageview"><img id="pg" src="${img}"/><div id="hls"></div></div>
-      <div class="pager"><button onclick="pageDelta(-1)">‹</button><span>${s.page} / <span id="pc">?</span></span><button onclick="pageDelta(1)">›</button>
+    const img=srcPageUrl(s.path,s.page);
+    el('srcbody').innerHTML=meta+`<div class="pageview"><div class="pgload" id="pgload"><span class="spin"></span>페이지 불러오는 중…</div><img id="pg" src="${img}"/><div id="hls"></div></div>
+      <div class="pager"><button onclick="pageDelta(-1)">‹</button><span>${s.page} / <span id="pc">${s.pages||'?'}</span></span><button onclick="pageDelta(1)">›</button>
       <button onclick="gotoCited()" style="margin-left:8px">인용 구절</button></div>`;
+    // Drop the spinner once the page image is decoded (coexists with the
+    // highlight code's own pg.onload via addEventListener).
+    {const pg=el('pg'); const rm=()=>{const l=el('pgload'); if(l) l.remove();};
+     if(pg.complete) rm(); else pg.addEventListener('load',rm,{once:true});}
+    // Warm neighbor pages so ‹/› navigation is instant (server + browser cache).
+    for(const p of [s.page-1, s.page+1]){ if(p>=1 && (!s.pages || p<=s.pages)) new Image().src=srcPageUrl(s.path,p); }
+    // Highlights are only valid on the CITED page — the snippet isn't on other
+    // pages, so searching there mislocates the box.
+    const onCited=(s.page===s.citedPage);
     try{
-      const r=await api(`/source/highlights?path=${encodeURIComponent(s.path)}&page=${s.page}&q=${encodeURIComponent(s.q)}&token=${encodeURIComponent(TOKEN)}`);
-      const j=await r.json(); s.pages=j.pages||1; el('pc').textContent=s.pages;
-      const box=el('hls');
-      box.innerHTML=(j.rects||[]).map(rc=>`<div class="hl" style="left:${rc.x0*100}%;top:${rc.y0*100}%;width:${(rc.x1-rc.x0)*100}%;height:${(rc.y1-rc.y0)*100}%"></div>`).join('');
+      const r=await api(`/source/highlights?path=${encodeURIComponent(s.path)}&page=${s.page}&q=${encodeURIComponent(onCited?s.q:'')}&token=${encodeURIComponent(TOKEN)}`);
+      const j=await r.json();
+      if(seq!==_srcSeq) return;              // a newer render replaced this view — don't write stale data
+      if(j.pages) s.pages=j.pages;           // page count is owned by fetchPageCount (shown ASAP, decoupled)
+      const box=el('hls'); if(!box) return;
+      const rects=onCited?(j.rects||[]):[];  // clear highlights when not on the cited page
+      box.innerHTML=rects.map(rc=>`<div class="hl" style="left:${rc.x0*100}%;top:${rc.y0*100}%;width:${(rc.x1-rc.x0)*100}%;height:${(rc.y1-rc.y0)*100}%"></div>`).join('');
       const pg=el('pg'), first=box.querySelector('.hl');
       if(first){ const go=()=>first.scrollIntoView({block:'center'}); pg.complete?go():pg.onload=go; }
     }catch(e){}
   } else if(/\.(md|markdown)$/i.test(s.path)){
     const r=await api(`/source/text?path=${encodeURIComponent(s.path)}&raw=1&token=${encodeURIComponent(TOKEN)}`);
     const j=await r.json();
+    if(seq!==_srcSeq) return;
     const rendered=(window.marked&&marked.parse)?marked.parse(j.text||''):esc(j.text||'');
     el('srcbody').innerHTML=meta+`<div class="txtview md" id="txtview">${rendered}</div>`;
     markInDom(el('txtview'), s.q);
   } else {
     const r=await api(`/source/text?path=${encodeURIComponent(s.path)}&q=${encodeURIComponent(s.q||'')}&token=${encodeURIComponent(TOKEN)}`);
-    const j=await r.json(); const txt=j.text||''; const ranges=j.ranges||[];
+    const j=await r.json();
+    if(seq!==_srcSeq) return;
+    const txt=j.text||''; const ranges=j.ranges||[];
     let html='', last=0;
     for(const rg of ranges){ const a=rg[0], b=rg[1];
       html+=esc(txt.slice(last,a))+'<mark>'+esc(txt.slice(a,b))+'</mark>'; last=b; }
@@ -1221,9 +1379,11 @@ async function renderSource(){
     const mk=el('txtview').querySelector('mark'); if(mk) mk.scrollIntoView({block:'center'});
   }
 }
-function pageDelta(d){ if(!curSrc)return; curSrc.page=Math.max(1,Math.min(curSrc.pages,curSrc.page+d)); renderSource(); }
+function pageDelta(d){ if(!curSrc)return; const max=curSrc.pages||1e9; curSrc.page=Math.max(1,Math.min(max,curSrc.page+d)); renderSource(); }
 function gotoCited(){ if(!curSrc)return; curSrc.page=curSrc.citedPage; renderSource(); }
 function closeSource(){ el('srcpanel').classList.add('hidden'); }
+// Esc closes the preview modal when it's open.
+document.addEventListener('keydown',e=>{ if(e.key==='Escape' && !el('srcpanel').classList.contains('hidden')) closeSource(); });
 function escRe(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
 function markInDom(container,snippet){   // highlight cited text inside rendered HTML
   if(!snippet||!container) return;
